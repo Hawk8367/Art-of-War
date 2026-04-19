@@ -778,6 +778,8 @@ function updateActionAvailability(snapshot) {
     if (!row) continue;
     const shouldShow = index < limit;
     row.classList.toggle("hidden", !shouldShow);
+    row.hidden = !shouldShow;
+    row.style.display = shouldShow ? "" : "none";
     row.querySelectorAll("select").forEach((select) => {
       select.disabled = !shouldShow;
     });
@@ -792,9 +794,15 @@ function updateRepeatedMoveOptions(snapshot) {
   const totalMobilization = snapshot.game.you.totalMobilization;
   const selectedTypes = state.turnDraft.actions.slice(0, limit).map((action) => action.type).filter(Boolean);
 
-  for (let index = 0; index < limit; index += 1) {
+  for (let index = 0; index < 8; index += 1) {
     const select = document.getElementById(`action-type-${index}`);
     if (!select) continue;
+    if (index >= limit) {
+      Array.from(select.options).forEach((option) => {
+        option.disabled = false;
+      });
+      continue;
+    }
     const currentValue = state.turnDraft.actions[index].type;
     Array.from(select.options).forEach((option) => {
       if (!option.value) {
