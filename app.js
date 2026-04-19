@@ -173,6 +173,7 @@ function renderSetup(snapshot) {
   `;
   snapshot.constants.towers.forEach((tower) => {
     const select = document.getElementById(`setup-${tower}`);
+    select.disabled = you.ready;
     select.addEventListener("change", () => {
       state.setupDraft[tower] = select.value;
     });
@@ -587,14 +588,20 @@ function resetActionDraft(index) {
   state.turnDraft.actions[index] = createEmptyActionDraft();
   const typeSelect = document.getElementById(`action-type-${index}`);
   if (!typeSelect) return;
+  const targetSelect = document.getElementById(`action-target-${index}`);
+  const towerSelect = document.getElementById(`action-tower-${index}`);
+  const guessSelect = document.getElementById(`action-guess-${index}`);
   typeSelect.value = "";
-  document.getElementById(`action-target-${index}`).value = "";
-  document.getElementById(`action-tower-${index}`).value = "";
-  document.getElementById(`action-guess-${index}`).value = "";
+  if (targetSelect) targetSelect.value = "";
+  if (towerSelect) towerSelect.value = "";
+  if (guessSelect) guessSelect.value = "";
   for (let dist = 0; dist < 3; dist += 1) {
-    document.getElementById(`dist-target-${index}-${dist}`).value = "";
-    document.getElementById(`dist-tower-${index}-${dist}`).value = "";
-    document.getElementById(`dist-guess-${index}-${dist}`).value = "";
+    const distTarget = document.getElementById(`dist-target-${index}-${dist}`);
+    const distTower = document.getElementById(`dist-tower-${index}-${dist}`);
+    const distGuess = document.getElementById(`dist-guess-${index}-${dist}`);
+    if (distTarget) distTarget.value = "";
+    if (distTower) distTower.value = "";
+    if (distGuess) distGuess.value = "";
   }
   updateActionVisibility(index);
 }
@@ -627,9 +634,12 @@ function enforceDistributedUniqueTargets() {
         continue;
       }
       action.targets[dist] = { targetSeat: "", targetTower: "", guess: "" };
-      document.getElementById(`dist-target-${actionIndex}-${dist}`).value = "";
-      document.getElementById(`dist-tower-${actionIndex}-${dist}`).value = "";
-      document.getElementById(`dist-guess-${actionIndex}-${dist}`).value = "";
+      const distTarget = document.getElementById(`dist-target-${actionIndex}-${dist}`);
+      const distTower = document.getElementById(`dist-tower-${actionIndex}-${dist}`);
+      const distGuess = document.getElementById(`dist-guess-${actionIndex}-${dist}`);
+      if (distTarget) distTarget.value = "";
+      if (distTower) distTower.value = "";
+      if (distGuess) distGuess.value = "";
     }
   }
 }
@@ -771,7 +781,7 @@ function updateDecisionVisibility() {
   const priority = document.getElementById("decision-priority-wrap");
   const intervention = document.getElementById("decision-intervention-wrap");
   const exposure = document.getElementById("decision-exposure-wrap");
-  if (!details) return;
+  if (!details || !priority || !intervention || !exposure) return;
   details.classList.toggle("hidden", !["Priority Target", "Leader's Intervention", "Full Exposure"].includes(type));
   priority.classList.toggle("hidden", type !== "Priority Target");
   intervention.classList.toggle("hidden", type !== "Leader's Intervention");
@@ -786,6 +796,7 @@ function updateActionVisibility(index) {
   const towerSelect = document.getElementById(`action-tower-${index}`);
   const guessWrap = document.getElementById(`action-guess-wrap-${index}`);
   const distributedWrap = document.getElementById(`distributed-wrap-${index}`);
+  if (!targetLabel || !targetSelect || !towerLabel || !towerSelect || !guessWrap || !distributedWrap) return;
 
   const needsNation = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "Identity Check", "Move Check", "Interception"].includes(type);
   const needsTower = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(type);
