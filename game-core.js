@@ -111,6 +111,7 @@ function getPlayerRecord(lobby, token) {
 }
 
 function getNation(game, seat) {
+  if (seat == null) return null;
   return game.players.find((player) => player.seat === seat);
 }
 
@@ -191,6 +192,9 @@ function decisionCost(type) {
 
 function buildPlayerSnapshot(game, seat) {
   const nation = getNation(game, seat);
+  if (!nation) {
+    throw new Error("Player seat is no longer available in this match.");
+  }
   return {
     playerSeat: seat,
     nationName: nation.nationName,
@@ -212,19 +216,30 @@ function buildPlayerSnapshot(game, seat) {
       lastSubmittedDay: nation.lastSubmittedDay,
       activeTreaties: game.treaties
         .filter((treaty) => treaty.active && (treaty.a === seat || treaty.b === seat))
-        .map((treaty) => ({
-          withSeat: treaty.a === seat ? treaty.b : treaty.a,
-          withNation: getNation(game, treaty.a === seat ? treaty.b : treaty.a).nationName,
-          remaining: treaty.remaining,
-        })),
+        .map((treaty) => {
+          const otherSeat = treaty.a === seat ? treaty.b : treaty.a;
+          const otherNation = getNation(game, otherSeat);
+          if (!otherNation) return null;
+          return {
+            withSeat: otherSeat,
+            withNation: otherNation.nationName,
+            remaining: treaty.remaining,
+          };
+        })
+        .filter(Boolean),
       incomingTreaties: game.pendingTreatyOffers
         .filter((offer) => offer.to === seat && offer.dayProposed < game.day)
-        .map((offer) => ({
-          offerId: offer.id,
-          fromSeat: offer.from,
-          fromNation: getNation(game, offer.from).nationName,
-          duration: offer.duration,
-        })),
+        .map((offer) => {
+          const fromNation = getNation(game, offer.from);
+          if (!fromNation) return null;
+          return {
+            offerId: offer.id,
+            fromSeat: offer.from,
+            fromNation: fromNation.nationName,
+            duration: offer.duration,
+          };
+        })
+        .filter(Boolean),
       logDays: Object.keys(nation.resolutionHistory).map(Number).sort((a, b) => a - b),
       resolutionHistory: nation.resolutionHistory,
     },
@@ -242,6 +257,9 @@ function buildPlayerSnapshot(game, seat) {
 
 function submitTurn(game, seat, submission) {
   const nation = getNation(game, seat);
+  if (!nation) {
+    throw new Error("Player seat is no longer available in this match.");
+  }
   if (!game.started || game.finished) {
     throw new Error("Game is not accepting turns.");
   }
@@ -255,6 +273,7 @@ function submitTurn(game, seat, submission) {
   if (actions.length > allowedActions) {
     throw new Error("Too many actions submitted.");
   }
+  validateSubmission(game, nation, submission.treaty || null, decision, actions);
 
   nation.pendingTurn = {
     seat,
@@ -264,6 +283,103 @@ function submitTurn(game, seat, submission) {
     actions,
   };
   nation.lastSubmittedDay = game.day;
+}
+
+function validateSubmission(game, nation, treaty, decision, actions) {
+  if (!nation) {
+    throw new Error("Nation not found.");
+  }
+
+  const enemySeats = new Set(game.players.map((player) => player.seat).filter((seat) => seat !== nation.seat));
+  const validTower = (tower) => TOWERS.includes(tower);
+  const validCharacter = (character) => CHARACTER_POOL.includes(character);
+  const validAction = (type) => [...ATTACK_ACTIONS, ...DEFENSE_ACTIONS, ...INTEL_ACTIONS].includes(type);
+  const requireEnemySeat = (seat, label) => {
+    if (!enemySeats.has(seat)) {
+      throw new Error(`${label} needs a valid enemy nation.`);
+    }
+  };
+
+  if (decision && !NATIONAL_DECISIONS.includes(decision.type)) {
+    throw new Error("Selected national decision is invalid.");
+  }
+
+  if (treaty) {
+    requireEnemySeat(treaty.targetSeat, "Treaty proposal");
+    if (![1, 2, 3].includes(Number(treaty.duration))) {
+      throw new Error("Treaty proposal needs a valid duration.");
+    }
+  }
+
+  if (decision?.type === "Priority Target") {
+    requireEnemySeat(decision.targetSeat, "Priority Target");
+    if (!validTower(decision.payload)) {
+      throw new Error("Priority Target needs a nation and tower.");
+    }
+  }
+  if (decision?.type === "Leader's Intervention") {
+    requireEnemySeat(decision.targetSeat, "Leader's Intervention");
+    if (![...ATTACK_ACTIONS, ...DEFENSE_ACTIONS, ...INTEL_ACTIONS].includes(decision.payload)) {
+      throw new Error("Leader's Intervention needs a nation and an action.");
+    }
+  }
+  if (decision?.type === "Full Exposure") {
+    requireEnemySeat(decision.targetSeat, "Full Exposure");
+    const guesses = Array.isArray(decision.guess) ? decision.guess : [];
+    if (guesses.length !== 3 || guesses.some((guess) => !validCharacter(guess))) {
+      throw new Error("Full Exposure needs a nation and all three tower guesses.");
+    }
+  }
+
+  if (!nation.totalMobilization) {
+    const seen = new Set();
+    for (const action of actions) {
+      if (!action?.type) continue;
+      if (seen.has(action.type)) {
+        throw new Error("Repeated moves are not allowed for your nation.");
+      }
+      seen.add(action.type);
+    }
+  }
+
+  for (const action of actions) {
+    if (!validAction(action?.type)) {
+      throw new Error("One of the selected moves is invalid.");
+    }
+
+    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "Identity Check", "Move Check", "Interception"].includes(action.type)) {
+      requireEnemySeat(action.targetSeat, action.type);
+    }
+
+    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(action.type) && !validTower(action.targetTower)) {
+      throw new Error(`${action.type} needs a valid tower.`);
+    }
+
+    if (["Target Strike", "Siege Operation", "Identity Check"].includes(action.type) && !validCharacter(action.guess)) {
+      throw new Error(`${action.type} needs a valid character guess.`);
+    }
+
+    if (action?.type === "Distributed Assault") {
+      if (!Array.isArray(action.targets) || action.targets.length === 0) {
+        throw new Error("Distributed Assault needs at least one target.");
+      }
+      const seenTargets = new Set();
+      for (const target of action.targets || []) {
+        requireEnemySeat(target.targetSeat, "Distributed Assault");
+        if (!validTower(target.targetTower)) {
+          throw new Error("Distributed Assault needs a valid target tower.");
+        }
+        if (target.guess && !validCharacter(target.guess)) {
+          throw new Error("Distributed Assault has an invalid character guess.");
+        }
+        const key = `${target.targetSeat}:${target.targetTower}`;
+        if (seenTargets.has(key)) {
+          throw new Error("Distributed Assault cannot target the same tower twice on the same nation.");
+        }
+        seenTargets.add(key);
+      }
+    }
+  }
 }
 
 function everyoneSubmitted(game) {
@@ -710,6 +826,9 @@ function awardDayGold(game, resolution, topPlayers) {
 
 function scoreDay(game, resolution, resolvingDay) {
   const ranking = [...game.players].sort((a, b) => compareDayRanking(a, b, resolution));
+  if (ranking.length === 0) {
+    return;
+  }
   const topPlayers = ranking.filter((player) => compareDayRanking(player, ranking[0], resolution) === 0);
   const splitPoints = 50 / topPlayers.length;
   topPlayers.forEach((player) => {
