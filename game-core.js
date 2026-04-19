@@ -151,6 +151,10 @@ function activeActionLimit(player, decision) {
   return count;
 }
 
+function totalHealth(player) {
+  return TOWERS.reduce((sum, tower) => sum + player.towers[tower].hp, 0);
+}
+
 function actionCost(type) {
   const table = {
     Strike: 30,
