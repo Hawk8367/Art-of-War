@@ -280,7 +280,13 @@ function submitTurn(game, seat, submission) {
     decision,
     treaty: submission.treaty || null,
     treatyResponses: submission.treatyResponses || [],
-    actions,
+    actions: actions.map((action) => ({
+      ...action,
+      seat,
+      targets: Array.isArray(action.targets)
+        ? action.targets.map((target) => ({ ...target }))
+        : action.targets,
+    })),
   };
   nation.lastSubmittedDay = game.day;
 }
