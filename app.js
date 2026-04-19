@@ -5,6 +5,8 @@ const state = {
   pollHandle: null,
   snapshot: null,
   selectedLogDay: null,
+  pendingSnapshot: null,
+  suppressRenderWhileEditing: false,
   setupDraft: {
     Parliament: "",
     Base: "",
@@ -108,12 +110,21 @@ async function refreshState() {
   if (!state.lobbyId || !state.token) return;
   try {
     const snapshot = await api(`/api/state?lobby=${encodeURIComponent(state.lobbyId)}&token=${encodeURIComponent(state.token)}`);
-    state.snapshot = snapshot;
-    state.inviteLink = `${window.location.origin}/?lobby=${snapshot.lobbyId}`;
-    render();
+    if (state.suppressRenderWhileEditing) {
+      state.pendingSnapshot = snapshot;
+      return;
+    }
+    applySnapshot(snapshot);
   } catch (error) {
     el.heroStatus.textContent = error.message;
   }
+}
+
+function applySnapshot(snapshot) {
+  state.snapshot = snapshot;
+  state.pendingSnapshot = null;
+  state.inviteLink = `${window.location.origin}/?lobby=${snapshot.lobbyId}`;
+  render();
 }
 
 function renderRoster(snapshot) {
@@ -191,14 +202,20 @@ function renderGame(snapshot) {
   el.scoreboard.innerHTML = snapshot.game.nations.map((nation) => `
     <div class="score-card">
       <h3>${nation.nationName}</h3>
-      <div class="tower-grid">
-        ${Object.entries(nation.towers).map(([tower, data]) => `
-          <div class="tower-box ${data.hp <= 0 ? "dead" : ""}">
-            <span class="compact-label">${tower}</span>
-            <strong>${data.hp} HP</strong>
-          </div>
-        `).join("")}
-      </div>
+      ${
+        nation.seat === snapshot.game.playerSeat
+          ? `
+            <div class="tower-grid">
+              ${Object.entries(nation.towers).map(([tower, data]) => `
+                <div class="tower-box ${data.hp <= 0 ? "dead" : ""}">
+                  <span class="compact-label">${tower}</span>
+                  <strong>${data.hp} HP</strong>
+                </div>
+              `).join("")}
+            </div>
+          `
+          : `<p class="meta-text">Enemy tower health is hidden.</p>`
+      }
     </div>
   `).join("");
 
@@ -572,6 +589,29 @@ function bindTurnDraftEvents(snapshot) {
     }
   }
 }
+
+function interactionShouldPauseRendering(target) {
+  return Boolean(target && target.closest && target.closest("#setup-grid, #player-form"));
+}
+
+document.addEventListener("focusin", (event) => {
+  if (interactionShouldPauseRendering(event.target)) {
+    state.suppressRenderWhileEditing = true;
+  }
+});
+
+document.addEventListener("focusout", () => {
+  window.setTimeout(() => {
+    const active = document.activeElement;
+    if (interactionShouldPauseRendering(active)) {
+      return;
+    }
+    state.suppressRenderWhileEditing = false;
+    if (state.pendingSnapshot) {
+      applySnapshot(state.pendingSnapshot);
+    }
+  }, 0);
+});
 
 function renderMoveGuide() {
   el.moveGuideContent.innerHTML = Object.entries(moveDescriptions)
