@@ -306,7 +306,7 @@ function renderGame(snapshot) {
       </div>
 
       <div class="action-grid">
-        ${Array.from({ length: 8 }, (_, index) => `
+        ${Array.from({ length: actionLimit }, (_, index) => `
           <div class="action-row ${index >= actionLimit ? "hidden" : ""}" id="action-row-${index}">
             <h3>Action ${index + 1}</h3>
             <label class="compact-label" for="action-type-${index}">Move</label>
@@ -391,6 +391,7 @@ function collectCharacters() {
 }
 
 function collectSubmission() {
+  const firstNonEmpty = (...values) => values.find((value) => value !== "" && value != null);
   const decisionType = state.turnDraft?.decision?.type || document.getElementById("decision-type")?.value || "";
   const decisionTargetValue =
     decisionType === "Priority Target"
@@ -409,16 +410,16 @@ function collectSubmission() {
   const decision = decisionType
     ? {
         type: decisionType,
-        targetSeat: optionalNumber(state.turnDraft?.decision?.targetSeat ?? decisionTargetValue),
-        payload: (state.turnDraft?.decision?.payload ?? decisionPayloadValue) || "",
-        guess: ["Parliament", "Base", "Office"].map((tower) => (state.turnDraft?.decision?.guesses?.[tower] ?? document.getElementById(`fe-${tower}`)?.value) || ""),
+        targetSeat: optionalNumber(firstNonEmpty(state.turnDraft?.decision?.targetSeat, decisionTargetValue)),
+        payload: firstNonEmpty(state.turnDraft?.decision?.payload, decisionPayloadValue) || "",
+        guess: ["Parliament", "Base", "Office"].map((tower) => firstNonEmpty(state.turnDraft?.decision?.guesses?.[tower], document.getElementById(`fe-${tower}`)?.value) || ""),
       }
     : null;
 
-  const treatyTarget = optionalNumber(state.turnDraft?.treaty?.targetSeat ?? document.getElementById("treaty-target")?.value);
+  const treatyTarget = optionalNumber(firstNonEmpty(state.turnDraft?.treaty?.targetSeat, document.getElementById("treaty-target")?.value));
   const treaty = treatyTarget === null ? null : {
     targetSeat: treatyTarget,
-    duration: Number(state.turnDraft?.treaty?.duration ?? document.getElementById("treaty-duration").value),
+    duration: Number(firstNonEmpty(state.turnDraft?.treaty?.duration, document.getElementById("treaty-duration").value)),
   };
 
   const treatyResponses = Array.from(document.querySelectorAll(".treaty-response-select"))
@@ -429,7 +430,7 @@ function collectSubmission() {
     .filter((entry) => entry.response);
 
   const actions = [];
-  for (let index = 0; index < 8; index += 1) {
+  for (let index = 0; index < getAvailableActionLimit(state.snapshot); index += 1) {
     const actionDraft = state.turnDraft?.actions?.[index] || null;
     const type = actionDraft?.type || document.getElementById(`action-type-${index}`)?.value || "";
     if (!type) continue;
@@ -437,9 +438,9 @@ function collectSubmission() {
       const targets = [];
       for (let dist = 0; dist < 3; dist += 1) {
         const distDraft = actionDraft?.targets?.[dist] || null;
-        const targetSeat = optionalNumber(distDraft?.targetSeat ?? document.getElementById(`dist-target-${index}-${dist}`)?.value);
-        const targetTower = (distDraft?.targetTower ?? document.getElementById(`dist-tower-${index}-${dist}`)?.value) || "";
-        const guess = (distDraft?.guess ?? document.getElementById(`dist-guess-${index}-${dist}`)?.value) || "";
+        const targetSeat = optionalNumber(firstNonEmpty(distDraft?.targetSeat, document.getElementById(`dist-target-${index}-${dist}`)?.value));
+        const targetTower = firstNonEmpty(distDraft?.targetTower, document.getElementById(`dist-tower-${index}-${dist}`)?.value) || "";
+        const guess = firstNonEmpty(distDraft?.guess, document.getElementById(`dist-guess-${index}-${dist}`)?.value) || "";
         if (targetSeat !== null && targetTower) {
           targets.push({ targetSeat, targetTower, guess });
         }
@@ -449,9 +450,9 @@ function collectSubmission() {
     }
     actions.push({
       type,
-      targetSeat: optionalNumber(actionDraft?.targetSeat ?? document.getElementById(`action-target-${index}`)?.value),
-      targetTower: (actionDraft?.targetTower ?? document.getElementById(`action-tower-${index}`)?.value) || "",
-      guess: (actionDraft?.guess ?? document.getElementById(`action-guess-${index}`)?.value) || "",
+      targetSeat: optionalNumber(firstNonEmpty(actionDraft?.targetSeat, document.getElementById(`action-target-${index}`)?.value)),
+      targetTower: firstNonEmpty(actionDraft?.targetTower, document.getElementById(`action-tower-${index}`)?.value) || "",
+      guess: firstNonEmpty(actionDraft?.guess, document.getElementById(`action-guess-${index}`)?.value) || "",
     });
   }
 
@@ -650,14 +651,23 @@ function hydrateTurnDraft(snapshot) {
   });
   for (let index = 0; index < 8; index += 1) {
     const action = draft.actions[index];
-    document.getElementById(`action-type-${index}`).value = action.type;
-    document.getElementById(`action-target-${index}`).value = action.targetSeat;
-    document.getElementById(`action-tower-${index}`).value = action.targetTower;
-    document.getElementById(`action-guess-${index}`).value = action.guess;
+    const typeInput = document.getElementById(`action-type-${index}`);
+    const targetInput = document.getElementById(`action-target-${index}`);
+    const towerInput = document.getElementById(`action-tower-${index}`);
+    const guessInput = document.getElementById(`action-guess-${index}`);
+    if (!typeInput || !targetInput || !towerInput || !guessInput) continue;
+    typeInput.value = action.type;
+    targetInput.value = action.targetSeat;
+    towerInput.value = action.targetTower;
+    guessInput.value = action.guess;
     for (let dist = 0; dist < 3; dist += 1) {
-      document.getElementById(`dist-target-${index}-${dist}`).value = action.targets[dist].targetSeat;
-      document.getElementById(`dist-tower-${index}-${dist}`).value = action.targets[dist].targetTower;
-      document.getElementById(`dist-guess-${index}-${dist}`).value = action.targets[dist].guess;
+      const distTarget = document.getElementById(`dist-target-${index}-${dist}`);
+      const distTower = document.getElementById(`dist-tower-${index}-${dist}`);
+      const distGuess = document.getElementById(`dist-guess-${index}-${dist}`);
+      if (!distTarget || !distTower || !distGuess) continue;
+      distTarget.value = action.targets[dist].targetSeat;
+      distTower.value = action.targets[dist].targetTower;
+      distGuess.value = action.targets[dist].guess;
     }
     updateActionVisibility(index);
   }
@@ -684,8 +694,7 @@ function bindTurnDraftEvents(snapshot) {
   });
   document.getElementById("decision-type").addEventListener("change", (event) => {
     draft.decision.type = event.target.value;
-    updateDecisionVisibility();
-    updateActionAvailability(snapshot);
+    renderGame(snapshot);
   });
   const priorityTarget = document.getElementById("decision-target");
   const priorityPayload = document.getElementById("decision-payload");
@@ -703,33 +712,42 @@ function bindTurnDraftEvents(snapshot) {
     });
   });
   for (let index = 0; index < 8; index += 1) {
-    document.getElementById(`action-type-${index}`).addEventListener("change", (event) => {
+    const typeInput = document.getElementById(`action-type-${index}`);
+    const targetInput = document.getElementById(`action-target-${index}`);
+    const towerInput = document.getElementById(`action-tower-${index}`);
+    const guessInput = document.getElementById(`action-guess-${index}`);
+    if (!typeInput || !targetInput || !towerInput || !guessInput) continue;
+    typeInput.addEventListener("change", (event) => {
       draft.actions[index].type = event.target.value;
       updateActionVisibility(index);
       enforceUniqueActionSelections(snapshot);
       updateRepeatedMoveOptions(snapshot);
     });
-    document.getElementById(`action-target-${index}`).addEventListener("change", (event) => {
+    targetInput.addEventListener("change", (event) => {
       draft.actions[index].targetSeat = event.target.value;
     });
-    document.getElementById(`action-tower-${index}`).addEventListener("change", (event) => {
+    towerInput.addEventListener("change", (event) => {
       draft.actions[index].targetTower = event.target.value;
     });
-    document.getElementById(`action-guess-${index}`).addEventListener("change", (event) => {
+    guessInput.addEventListener("change", (event) => {
       draft.actions[index].guess = event.target.value;
     });
     for (let dist = 0; dist < 3; dist += 1) {
-      document.getElementById(`dist-target-${index}-${dist}`).addEventListener("change", (event) => {
+      const distTarget = document.getElementById(`dist-target-${index}-${dist}`);
+      const distTower = document.getElementById(`dist-tower-${index}-${dist}`);
+      const distGuess = document.getElementById(`dist-guess-${index}-${dist}`);
+      if (!distTarget || !distTower || !distGuess) continue;
+      distTarget.addEventListener("change", (event) => {
         draft.actions[index].targets[dist].targetSeat = event.target.value;
         enforceDistributedUniqueTargets();
         updateDistributedDuplicateOptions();
       });
-      document.getElementById(`dist-tower-${index}-${dist}`).addEventListener("change", (event) => {
+      distTower.addEventListener("change", (event) => {
         draft.actions[index].targets[dist].targetTower = event.target.value;
         enforceDistributedUniqueTargets();
         updateDistributedDuplicateOptions();
       });
-      document.getElementById(`dist-guess-${index}-${dist}`).addEventListener("change", (event) => {
+      distGuess.addEventListener("change", (event) => {
         draft.actions[index].targets[dist].guess = event.target.value;
       });
     }
