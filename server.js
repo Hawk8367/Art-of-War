@@ -67,7 +67,7 @@ function buildLobbyState(lobby, token) {
     roster: lobby.players.map((player) => ({
       seat: player.seat,
       displayName: player.displayName,
-      nationName: getNation(lobby.game, player.seat).nationName,
+      nationName: getNation(lobby.game, player.seat)?.nationName || "Unknown Nation",
     })),
     game: buildPlayerSnapshot(lobby.game, playerRecord.seat),
     constants: {
