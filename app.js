@@ -13,6 +13,7 @@ const state = {
     Office: "",
   },
   turnDraft: null,
+  lastSeenDisplayDay: null,
 };
 
 const moveDescriptions = {
@@ -121,9 +122,15 @@ async function refreshState() {
 }
 
 function applySnapshot(snapshot) {
+  const previousDay = state.snapshot?.game?.displayDay ?? state.lastSeenDisplayDay;
+  const wasStarted = state.snapshot?.game?.started;
   state.snapshot = snapshot;
   state.pendingSnapshot = null;
   state.inviteLink = `${window.location.origin}/?lobby=${snapshot.lobbyId}`;
+  if (wasStarted && previousDay !== null && snapshot.game.displayDay > previousDay) {
+    window.alert(`All players submitted. Day ${snapshot.game.displayDay} has begun.`);
+  }
+  state.lastSeenDisplayDay = snapshot.game.displayDay;
   render();
 }
 
@@ -191,7 +198,6 @@ function renderGame(snapshot) {
   if (!state.turnDraft || state.turnDraft.day !== snapshot.game.displayDay) {
     state.turnDraft = createEmptyTurnDraft(snapshot);
   }
-  const draft = state.turnDraft;
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
   el.statusBanner.innerHTML = `
     <strong>${you.nationName}</strong>
@@ -266,20 +272,34 @@ function renderGame(snapshot) {
         <div class="action-row">
           <label class="compact-label" for="decision-type">Decision</label>
           <select id="decision-type">${decisionOptions}</select>
-          <label class="compact-label" for="decision-target">Target Nation</label>
-          <select id="decision-target">${nationOptions(snapshot)}</select>
-          <label class="compact-label" for="decision-payload">Tower Or Action</label>
-          <select id="decision-payload">
-            ${towerOptions()}
-            ${[...snapshot.constants.attackActions, ...snapshot.constants.defenseActions, ...snapshot.constants.intelActions].map((action) => `<option value="${action}">${action}</option>`).join("")}
-          </select>
-          <div class="tower-grid">
-            ${snapshot.constants.towers.map((tower) => `
-              <div>
-                <label class="compact-label" for="fe-${tower}">${tower} Guess</label>
-                <select id="fe-${tower}">${characterOptions("Select character")}</select>
+          <div id="decision-details" class="hidden">
+            <div id="decision-priority-wrap" class="hidden">
+              <label class="compact-label" for="decision-target">Target Nation</label>
+              <select id="decision-target">${nationOptions(snapshot)}</select>
+              <label class="compact-label" for="decision-payload">Target Tower</label>
+              <select id="decision-payload">${towerOptions()}</select>
+            </div>
+            <div id="decision-intervention-wrap" class="hidden">
+              <label class="compact-label" for="decision-target-intervention">Target Nation</label>
+              <select id="decision-target-intervention">${nationOptions(snapshot)}</select>
+              <label class="compact-label" for="decision-action">Blocked Action</label>
+              <select id="decision-action">
+                <option value="">Select action</option>
+                ${[...snapshot.constants.attackActions, ...snapshot.constants.defenseActions, ...snapshot.constants.intelActions].map((action) => `<option value="${action}">${action}</option>`).join("")}
+              </select>
+            </div>
+            <div id="decision-exposure-wrap" class="hidden">
+              <label class="compact-label" for="decision-target-exposure">Target Nation</label>
+              <select id="decision-target-exposure">${nationOptions(snapshot)}</select>
+              <div class="tower-grid">
+                ${snapshot.constants.towers.map((tower) => `
+                  <div>
+                    <label class="compact-label" for="fe-${tower}">${tower} Guess</label>
+                    <select id="fe-${tower}">${characterOptions("Select character")}</select>
+                  </div>
+                `).join("")}
               </div>
-            `).join("")}
+            </div>
           </div>
         </div>
       </div>
@@ -290,13 +310,15 @@ function renderGame(snapshot) {
             <h3>Action ${index + 1}</h3>
             <label class="compact-label" for="action-type-${index}">Move</label>
             <select id="action-type-${index}">${actionOptions}</select>
-            <label class="compact-label" for="action-target-${index}">Target Nation</label>
-            <select id="action-target-${index}">${nationOptions(snapshot)}</select>
-            <label class="compact-label" for="action-tower-${index}">Target Tower</label>
-            <select id="action-tower-${index}">${towerOptions()}</select>
-            <label class="compact-label" for="action-guess-${index}">Character Guess</label>
-            <select id="action-guess-${index}">${characterOptions("No guess")}</select>
-            <div class="distributed-grid">
+            <label class="compact-label hidden" id="action-target-label-${index}" for="action-target-${index}">Target Nation</label>
+            <select id="action-target-${index}" class="hidden">${nationOptions(snapshot)}</select>
+            <label class="compact-label hidden" id="action-tower-label-${index}" for="action-tower-${index}">Target Tower</label>
+            <select id="action-tower-${index}" class="hidden">${towerOptions()}</select>
+            <div id="action-guess-wrap-${index}" class="hidden">
+              <label class="compact-label" for="action-guess-${index}">Character Guess</label>
+              <select id="action-guess-${index}">${characterOptions("No guess")}</select>
+            </div>
+            <div id="distributed-wrap-${index}" class="distributed-grid hidden">
               ${Array.from({ length: 3 }, (_, dist) => `
                 <div class="subtle-box distributed-row">
                   <span class="compact-label">Distributed ${dist + 1}</span>
@@ -368,11 +390,25 @@ function collectCharacters() {
 
 function collectSubmission() {
   const decisionType = state.turnDraft?.decision?.type || document.getElementById("decision-type")?.value || "";
+  const decisionTargetValue =
+    decisionType === "Priority Target"
+      ? document.getElementById("decision-target")?.value
+      : decisionType === "Leader's Intervention"
+        ? document.getElementById("decision-target-intervention")?.value
+        : decisionType === "Full Exposure"
+          ? document.getElementById("decision-target-exposure")?.value
+          : "";
+  const decisionPayloadValue =
+    decisionType === "Priority Target"
+      ? document.getElementById("decision-payload")?.value
+      : decisionType === "Leader's Intervention"
+        ? document.getElementById("decision-action")?.value
+        : "";
   const decision = decisionType
     ? {
         type: decisionType,
-        targetSeat: optionalNumber(state.turnDraft?.decision?.targetSeat ?? document.getElementById("decision-target")?.value),
-        payload: (state.turnDraft?.decision?.payload ?? document.getElementById("decision-payload")?.value) || "",
+        targetSeat: optionalNumber(state.turnDraft?.decision?.targetSeat ?? decisionTargetValue),
+        payload: (state.turnDraft?.decision?.payload ?? decisionPayloadValue) || "",
         guess: ["Parliament", "Base", "Office"].map((tower) => (state.turnDraft?.decision?.guesses?.[tower] ?? document.getElementById(`fe-${tower}`)?.value) || ""),
       }
     : null;
@@ -481,6 +517,7 @@ async function submitTurn() {
     },
   });
   state.turnDraft = null;
+  window.alert("Turn submitted successfully.");
   await refreshState();
 }
 
@@ -514,8 +551,21 @@ function hydrateTurnDraft(snapshot) {
   document.getElementById("treaty-target").value = draft.treaty.targetSeat;
   document.getElementById("treaty-duration").value = draft.treaty.duration;
   document.getElementById("decision-type").value = draft.decision.type;
-  document.getElementById("decision-target").value = draft.decision.targetSeat;
-  document.getElementById("decision-payload").value = draft.decision.payload;
+  if (document.getElementById("decision-target")) {
+    document.getElementById("decision-target").value = draft.decision.targetSeat;
+  }
+  if (document.getElementById("decision-payload")) {
+    document.getElementById("decision-payload").value = draft.decision.payload;
+  }
+  if (document.getElementById("decision-target-intervention")) {
+    document.getElementById("decision-target-intervention").value = draft.decision.targetSeat;
+  }
+  if (document.getElementById("decision-action")) {
+    document.getElementById("decision-action").value = draft.decision.payload;
+  }
+  if (document.getElementById("decision-target-exposure")) {
+    document.getElementById("decision-target-exposure").value = draft.decision.targetSeat;
+  }
   snapshot.constants.towers.forEach((tower) => {
     document.getElementById(`fe-${tower}`).value = draft.decision.guesses[tower];
   });
@@ -533,7 +583,9 @@ function hydrateTurnDraft(snapshot) {
       document.getElementById(`dist-tower-${index}-${dist}`).value = action.targets[dist].targetTower;
       document.getElementById(`dist-guess-${index}-${dist}`).value = action.targets[dist].guess;
     }
+    updateActionVisibility(index);
   }
+  updateDecisionVisibility();
 }
 
 function bindTurnDraftEvents(snapshot) {
@@ -551,13 +603,18 @@ function bindTurnDraftEvents(snapshot) {
   });
   document.getElementById("decision-type").addEventListener("change", (event) => {
     draft.decision.type = event.target.value;
+    updateDecisionVisibility();
   });
-  document.getElementById("decision-target").addEventListener("change", (event) => {
-    draft.decision.targetSeat = event.target.value;
-  });
-  document.getElementById("decision-payload").addEventListener("change", (event) => {
-    draft.decision.payload = event.target.value;
-  });
+  const priorityTarget = document.getElementById("decision-target");
+  const priorityPayload = document.getElementById("decision-payload");
+  const interventionTarget = document.getElementById("decision-target-intervention");
+  const interventionAction = document.getElementById("decision-action");
+  const exposureTarget = document.getElementById("decision-target-exposure");
+  if (priorityTarget) priorityTarget.addEventListener("change", (event) => { draft.decision.targetSeat = event.target.value; });
+  if (priorityPayload) priorityPayload.addEventListener("change", (event) => { draft.decision.payload = event.target.value; });
+  if (interventionTarget) interventionTarget.addEventListener("change", (event) => { draft.decision.targetSeat = event.target.value; });
+  if (interventionAction) interventionAction.addEventListener("change", (event) => { draft.decision.payload = event.target.value; });
+  if (exposureTarget) exposureTarget.addEventListener("change", (event) => { draft.decision.targetSeat = event.target.value; });
   snapshot.constants.towers.forEach((tower) => {
     document.getElementById(`fe-${tower}`).addEventListener("change", (event) => {
       draft.decision.guesses[tower] = event.target.value;
@@ -566,6 +623,7 @@ function bindTurnDraftEvents(snapshot) {
   for (let index = 0; index < 8; index += 1) {
     document.getElementById(`action-type-${index}`).addEventListener("change", (event) => {
       draft.actions[index].type = event.target.value;
+      updateActionVisibility(index);
     });
     document.getElementById(`action-target-${index}`).addEventListener("change", (event) => {
       draft.actions[index].targetSeat = event.target.value;
@@ -588,6 +646,41 @@ function bindTurnDraftEvents(snapshot) {
       });
     }
   }
+}
+
+function updateDecisionVisibility() {
+  const type = document.getElementById("decision-type")?.value || "";
+  const details = document.getElementById("decision-details");
+  const priority = document.getElementById("decision-priority-wrap");
+  const intervention = document.getElementById("decision-intervention-wrap");
+  const exposure = document.getElementById("decision-exposure-wrap");
+  if (!details) return;
+  details.classList.toggle("hidden", !["Priority Target", "Leader's Intervention", "Full Exposure"].includes(type));
+  priority.classList.toggle("hidden", type !== "Priority Target");
+  intervention.classList.toggle("hidden", type !== "Leader's Intervention");
+  exposure.classList.toggle("hidden", type !== "Full Exposure");
+}
+
+function updateActionVisibility(index) {
+  const type = document.getElementById(`action-type-${index}`)?.value || "";
+  const targetLabel = document.getElementById(`action-target-label-${index}`);
+  const targetSelect = document.getElementById(`action-target-${index}`);
+  const towerLabel = document.getElementById(`action-tower-label-${index}`);
+  const towerSelect = document.getElementById(`action-tower-${index}`);
+  const guessWrap = document.getElementById(`action-guess-wrap-${index}`);
+  const distributedWrap = document.getElementById(`distributed-wrap-${index}`);
+
+  const needsNation = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "Identity Check", "Move Check", "Interception"].includes(type);
+  const needsTower = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(type);
+  const needsGuess = ["Target Strike", "Siege Operation", "Identity Check"].includes(type);
+  const isDistributed = type === "Distributed Assault";
+
+  targetLabel.classList.toggle("hidden", !needsNation);
+  targetSelect.classList.toggle("hidden", !needsNation);
+  towerLabel.classList.toggle("hidden", !needsTower);
+  towerSelect.classList.toggle("hidden", !needsTower);
+  guessWrap.classList.toggle("hidden", !needsGuess);
+  distributedWrap.classList.toggle("hidden", !isDistributed);
 }
 
 function interactionShouldPauseRendering(target) {
