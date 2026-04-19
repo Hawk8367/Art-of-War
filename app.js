@@ -149,6 +149,8 @@ function renderSetup(snapshot) {
   const you = snapshot.game.you;
   el.setupPanel.classList.toggle("hidden", snapshot.game.started);
   if (snapshot.game.started) return;
+  el.readyButton.disabled = you.ready;
+  el.readyButton.textContent = you.ready ? "Characters Locked ✓" : "Lock In Characters";
   const draft = {
     Parliament: state.setupDraft.Parliament || you.towers.Parliament.character || snapshot.constants.characters[0],
     Base: state.setupDraft.Base || you.towers.Base.character || snapshot.constants.characters[1] || snapshot.constants.characters[0],
@@ -221,7 +223,16 @@ function renderGame(snapshot) {
               `).join("")}
             </div>
           `
-          : `<p class="meta-text">Enemy tower health is hidden.</p>`
+          : `
+            <div class="tower-grid">
+              ${Object.entries(nation.towers).map(([tower, data]) => `
+                <div class="tower-box ${data.hp <= 0 ? "dead" : ""}">
+                  <span class="compact-label">${tower}</span>
+                  <strong>${data.hp > 0 ? "Alive" : "Destroyed"}</strong>
+                </div>
+              `).join("")}
+            </div>
+          `
       }
     </div>
   `).join("");
