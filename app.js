@@ -198,6 +198,7 @@ function renderGame(snapshot) {
   if (!state.turnDraft || state.turnDraft.day !== snapshot.game.displayDay) {
     state.turnDraft = createEmptyTurnDraft(snapshot);
   }
+  const actionLimit = getAvailableActionLimit(snapshot);
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
   el.statusBanner.innerHTML = `
     <strong>${you.nationName}</strong>
@@ -306,25 +307,25 @@ function renderGame(snapshot) {
 
       <div class="action-grid">
         ${Array.from({ length: 8 }, (_, index) => `
-          <div class="action-row">
+          <div class="action-row ${index >= actionLimit ? "hidden" : ""}" id="action-row-${index}">
             <h3>Action ${index + 1}</h3>
             <label class="compact-label" for="action-type-${index}">Move</label>
-            <select id="action-type-${index}">${actionOptions}</select>
+            <select id="action-type-${index}" ${index >= actionLimit ? "disabled" : ""}>${actionOptions}</select>
             <label class="compact-label hidden" id="action-target-label-${index}" for="action-target-${index}">Target Nation</label>
-            <select id="action-target-${index}" class="hidden">${nationOptions(snapshot)}</select>
+            <select id="action-target-${index}" class="hidden" ${index >= actionLimit ? "disabled" : ""}>${nationOptions(snapshot)}</select>
             <label class="compact-label hidden" id="action-tower-label-${index}" for="action-tower-${index}">Target Tower</label>
-            <select id="action-tower-${index}" class="hidden">${towerOptions()}</select>
+            <select id="action-tower-${index}" class="hidden" ${index >= actionLimit ? "disabled" : ""}>${towerOptions()}</select>
             <div id="action-guess-wrap-${index}" class="hidden">
               <label class="compact-label" for="action-guess-${index}">Character Guess</label>
-              <select id="action-guess-${index}">${characterOptions("No guess")}</select>
+              <select id="action-guess-${index}" ${index >= actionLimit ? "disabled" : ""}>${characterOptions("No guess")}</select>
             </div>
             <div id="distributed-wrap-${index}" class="distributed-grid hidden">
               ${Array.from({ length: 3 }, (_, dist) => `
                 <div class="subtle-box distributed-row">
                   <span class="compact-label">Distributed ${dist + 1}</span>
-                  <select id="dist-target-${index}-${dist}">${nationOptions(snapshot)}</select>
-                  <select id="dist-tower-${index}-${dist}">${towerOptions()}</select>
-                  <select id="dist-guess-${index}-${dist}">${characterOptions("No guess")}</select>
+                  <select id="dist-target-${index}-${dist}" ${index >= actionLimit ? "disabled" : ""}>${nationOptions(snapshot)}</select>
+                  <select id="dist-tower-${index}-${dist}" ${index >= actionLimit ? "disabled" : ""}>${towerOptions()}</select>
+                  <select id="dist-guess-${index}-${dist}" ${index >= actionLimit ? "disabled" : ""}>${characterOptions("No guess")}</select>
                 </div>
               `).join("")}
             </div>
@@ -336,6 +337,7 @@ function renderGame(snapshot) {
 
   hydrateTurnDraft(snapshot);
   bindTurnDraftEvents(snapshot);
+  updateActionAvailability(snapshot);
 }
 
 function renderLogs(snapshot) {
@@ -456,6 +458,15 @@ function collectSubmission() {
   return { decision, treaty, treatyResponses, actions };
 }
 
+function getAvailableActionLimit(snapshot) {
+  const you = snapshot.game.you;
+  let count = you.towers.Base.hp > 0 ? 3 : 2;
+  const decisionType = state.turnDraft?.decision?.type || "";
+  if (decisionType === "War Mobilization") count += 1;
+  if (decisionType === "Expanded Command") return 8;
+  return count;
+}
+
 function optionalNumber(value) {
   return value === "" || value == null ? null : Number(value);
 }
@@ -546,6 +557,71 @@ function createEmptyTurnDraft(snapshot) {
   };
 }
 
+function createEmptyActionDraft() {
+  return {
+    type: "",
+    targetSeat: "",
+    targetTower: "",
+    guess: "",
+    targets: Array.from({ length: 3 }, () => ({
+      targetSeat: "",
+      targetTower: "",
+      guess: "",
+    })),
+  };
+}
+
+function resetActionDraft(index) {
+  state.turnDraft.actions[index] = createEmptyActionDraft();
+  const typeSelect = document.getElementById(`action-type-${index}`);
+  if (!typeSelect) return;
+  typeSelect.value = "";
+  document.getElementById(`action-target-${index}`).value = "";
+  document.getElementById(`action-tower-${index}`).value = "";
+  document.getElementById(`action-guess-${index}`).value = "";
+  for (let dist = 0; dist < 3; dist += 1) {
+    document.getElementById(`dist-target-${index}-${dist}`).value = "";
+    document.getElementById(`dist-tower-${index}-${dist}`).value = "";
+    document.getElementById(`dist-guess-${index}-${dist}`).value = "";
+  }
+  updateActionVisibility(index);
+}
+
+function enforceUniqueActionSelections(snapshot) {
+  if (snapshot.game.you.totalMobilization) return;
+  const limit = getAvailableActionLimit(snapshot);
+  const seen = new Set();
+  for (let index = 0; index < limit; index += 1) {
+    const action = state.turnDraft.actions[index];
+    if (!action.type) continue;
+    if (seen.has(action.type)) {
+      resetActionDraft(index);
+      continue;
+    }
+    seen.add(action.type);
+  }
+}
+
+function enforceDistributedUniqueTargets() {
+  for (let actionIndex = 0; actionIndex < 8; actionIndex += 1) {
+    const action = state.turnDraft?.actions?.[actionIndex];
+    if (!action || action.type !== "Distributed Assault") continue;
+    const seen = new Set();
+    for (let dist = 0; dist < 3; dist += 1) {
+      const target = action.targets[dist];
+      const key = `${target.targetSeat}:${target.targetTower}`;
+      if (!target.targetSeat || !target.targetTower || !seen.has(key)) {
+        if (target.targetSeat && target.targetTower) seen.add(key);
+        continue;
+      }
+      action.targets[dist] = { targetSeat: "", targetTower: "", guess: "" };
+      document.getElementById(`dist-target-${actionIndex}-${dist}`).value = "";
+      document.getElementById(`dist-tower-${actionIndex}-${dist}`).value = "";
+      document.getElementById(`dist-guess-${actionIndex}-${dist}`).value = "";
+    }
+  }
+}
+
 function hydrateTurnDraft(snapshot) {
   const draft = state.turnDraft;
   document.getElementById("treaty-target").value = draft.treaty.targetSeat;
@@ -586,6 +662,11 @@ function hydrateTurnDraft(snapshot) {
     updateActionVisibility(index);
   }
   updateDecisionVisibility();
+  updateActionAvailability(snapshot);
+  enforceUniqueActionSelections(snapshot);
+  updateRepeatedMoveOptions(snapshot);
+  enforceDistributedUniqueTargets();
+  updateDistributedDuplicateOptions();
 }
 
 function bindTurnDraftEvents(snapshot) {
@@ -604,6 +685,7 @@ function bindTurnDraftEvents(snapshot) {
   document.getElementById("decision-type").addEventListener("change", (event) => {
     draft.decision.type = event.target.value;
     updateDecisionVisibility();
+    updateActionAvailability(snapshot);
   });
   const priorityTarget = document.getElementById("decision-target");
   const priorityPayload = document.getElementById("decision-payload");
@@ -624,6 +706,8 @@ function bindTurnDraftEvents(snapshot) {
     document.getElementById(`action-type-${index}`).addEventListener("change", (event) => {
       draft.actions[index].type = event.target.value;
       updateActionVisibility(index);
+      enforceUniqueActionSelections(snapshot);
+      updateRepeatedMoveOptions(snapshot);
     });
     document.getElementById(`action-target-${index}`).addEventListener("change", (event) => {
       draft.actions[index].targetSeat = event.target.value;
@@ -637,9 +721,13 @@ function bindTurnDraftEvents(snapshot) {
     for (let dist = 0; dist < 3; dist += 1) {
       document.getElementById(`dist-target-${index}-${dist}`).addEventListener("change", (event) => {
         draft.actions[index].targets[dist].targetSeat = event.target.value;
+        enforceDistributedUniqueTargets();
+        updateDistributedDuplicateOptions();
       });
       document.getElementById(`dist-tower-${index}-${dist}`).addEventListener("change", (event) => {
         draft.actions[index].targets[dist].targetTower = event.target.value;
+        enforceDistributedUniqueTargets();
+        updateDistributedDuplicateOptions();
       });
       document.getElementById(`dist-guess-${index}-${dist}`).addEventListener("change", (event) => {
         draft.actions[index].targets[dist].guess = event.target.value;
@@ -681,6 +769,63 @@ function updateActionVisibility(index) {
   towerSelect.classList.toggle("hidden", !needsTower);
   guessWrap.classList.toggle("hidden", !needsGuess);
   distributedWrap.classList.toggle("hidden", !isDistributed);
+}
+
+function updateActionAvailability(snapshot) {
+  const limit = getAvailableActionLimit(snapshot);
+  for (let index = 0; index < 8; index += 1) {
+    const row = document.getElementById(`action-row-${index}`);
+    if (!row) continue;
+    const shouldShow = index < limit;
+    row.classList.toggle("hidden", !shouldShow);
+    row.querySelectorAll("select").forEach((select) => {
+      select.disabled = !shouldShow;
+    });
+    if (!shouldShow && state.turnDraft?.actions?.[index]) {
+      state.turnDraft.actions[index] = createEmptyActionDraft();
+    }
+  }
+}
+
+function updateRepeatedMoveOptions(snapshot) {
+  const limit = getAvailableActionLimit(snapshot);
+  const totalMobilization = snapshot.game.you.totalMobilization;
+  const selectedTypes = state.turnDraft.actions.slice(0, limit).map((action) => action.type).filter(Boolean);
+
+  for (let index = 0; index < limit; index += 1) {
+    const select = document.getElementById(`action-type-${index}`);
+    if (!select) continue;
+    const currentValue = state.turnDraft.actions[index].type;
+    Array.from(select.options).forEach((option) => {
+      if (!option.value) {
+        option.disabled = false;
+        return;
+      }
+      option.disabled = !totalMobilization && option.value !== currentValue && selectedTypes.includes(option.value);
+    });
+  }
+}
+
+function updateDistributedDuplicateOptions() {
+  for (let actionIndex = 0; actionIndex < 8; actionIndex += 1) {
+    const type = state.turnDraft?.actions?.[actionIndex]?.type || "";
+    if (type !== "Distributed Assault") continue;
+    const targets = state.turnDraft.actions[actionIndex].targets;
+    for (let dist = 0; dist < 3; dist += 1) {
+      const towerSelect = document.getElementById(`dist-tower-${actionIndex}-${dist}`);
+      const nationValue = targets[dist].targetSeat;
+      const currentTower = targets[dist].targetTower;
+      if (!towerSelect) continue;
+      Array.from(towerSelect.options).forEach((option) => {
+        if (!option.value) {
+          option.disabled = false;
+          return;
+        }
+        const duplicate = targets.some((target, otherIndex) => otherIndex !== dist && target.targetSeat === nationValue && target.targetTower === option.value && nationValue !== "");
+        option.disabled = duplicate && option.value !== currentTower;
+      });
+    }
+  }
 }
 
 function interactionShouldPauseRendering(target) {
