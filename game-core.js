@@ -702,6 +702,7 @@ function resolveAttacks(game, resolution) {
     if (action.type === "Siege Operation") {
       game.pendingSieges.push({ seat: attacker.seat, targetSeat: defender.seat, targetTower: action.targetTower, guess: action.guess, dayToResolve: game.day + 1 });
       addPlayerResult(resolution, attacker.seat, "attack", `Successful on ${defender.nationName} ${action.targetTower}`, "Siege Operation");
+      addPlayerResult(resolution, defender.seat, "summary", `Incoming siege prepared against ${action.targetTower}`);
       return;
     }
     if (treatyBlocking(game, attacker.seat, defender.seat)) {
