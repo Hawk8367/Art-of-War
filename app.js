@@ -5,6 +5,12 @@ const state = {
   pollHandle: null,
   snapshot: null,
   selectedLogDay: null,
+  setupDraft: {
+    Parliament: "",
+    Base: "",
+    Office: "",
+  },
+  turnDraft: null,
 };
 
 const moveDescriptions = {
@@ -125,6 +131,11 @@ function renderSetup(snapshot) {
   const you = snapshot.game.you;
   el.setupPanel.classList.toggle("hidden", snapshot.game.started);
   if (snapshot.game.started) return;
+  const draft = {
+    Parliament: state.setupDraft.Parliament || you.towers.Parliament.character || snapshot.constants.characters[0],
+    Base: state.setupDraft.Base || you.towers.Base.character || snapshot.constants.characters[1] || snapshot.constants.characters[0],
+    Office: state.setupDraft.Office || you.towers.Office.character || snapshot.constants.characters[2] || snapshot.constants.characters[0],
+  };
   el.setupGrid.innerHTML = `
     <div class="player-card">
       <h3>${you.nationName}</h3>
@@ -133,13 +144,19 @@ function renderSetup(snapshot) {
           <div class="tower-box">
             <label class="compact-label" for="setup-${tower}">${tower}</label>
             <select id="setup-${tower}">
-              ${snapshot.constants.characters.map((character) => `<option value="${character}" ${you.towers[tower].character === character ? "selected" : ""}>${character}</option>`).join("")}
+              ${snapshot.constants.characters.map((character) => `<option value="${character}" ${draft[tower] === character ? "selected" : ""}>${character}</option>`).join("")}
             </select>
           </div>
         `).join("")}
       </div>
     </div>
   `;
+  snapshot.constants.towers.forEach((tower) => {
+    const select = document.getElementById(`setup-${tower}`);
+    select.addEventListener("change", () => {
+      state.setupDraft[tower] = select.value;
+    });
+  });
 }
 
 function nationOptions(snapshot, includeEmpty = true) {
@@ -160,6 +177,10 @@ function characterOptions(optionalLabel = "None") {
 
 function renderGame(snapshot) {
   const you = snapshot.game.you;
+  if (!state.turnDraft || state.turnDraft.day !== snapshot.game.displayDay) {
+    state.turnDraft = createEmptyTurnDraft(snapshot);
+  }
+  const draft = state.turnDraft;
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
   el.statusBanner.innerHTML = `
     <strong>${you.nationName}</strong>
@@ -273,6 +294,9 @@ function renderGame(snapshot) {
       </div>
     </section>
   `;
+
+  hydrateTurnDraft(snapshot);
+  bindTurnDraftEvents(snapshot);
 }
 
 function renderLogs(snapshot) {
@@ -319,43 +343,48 @@ function render() {
 
 function collectCharacters() {
   return {
-    Parliament: document.getElementById("setup-Parliament").value,
-    Base: document.getElementById("setup-Base").value,
-    Office: document.getElementById("setup-Office").value,
+    Parliament: state.setupDraft.Parliament || document.getElementById("setup-Parliament").value,
+    Base: state.setupDraft.Base || document.getElementById("setup-Base").value,
+    Office: state.setupDraft.Office || document.getElementById("setup-Office").value,
   };
 }
 
 function collectSubmission() {
-  const decisionType = document.getElementById("decision-type")?.value || "";
+  const decisionType = state.turnDraft?.decision?.type || document.getElementById("decision-type")?.value || "";
   const decision = decisionType
     ? {
         type: decisionType,
-        targetSeat: optionalNumber(document.getElementById("decision-target")?.value),
-        payload: document.getElementById("decision-payload")?.value || "",
-        guess: ["Parliament", "Base", "Office"].map((tower) => document.getElementById(`fe-${tower}`)?.value || ""),
+        targetSeat: optionalNumber(state.turnDraft?.decision?.targetSeat ?? document.getElementById("decision-target")?.value),
+        payload: (state.turnDraft?.decision?.payload ?? document.getElementById("decision-payload")?.value) || "",
+        guess: ["Parliament", "Base", "Office"].map((tower) => (state.turnDraft?.decision?.guesses?.[tower] ?? document.getElementById(`fe-${tower}`)?.value) || ""),
       }
     : null;
 
-  const treatyTarget = optionalNumber(document.getElementById("treaty-target")?.value);
+  const treatyTarget = optionalNumber(state.turnDraft?.treaty?.targetSeat ?? document.getElementById("treaty-target")?.value);
   const treaty = treatyTarget === null ? null : {
     targetSeat: treatyTarget,
-    duration: Number(document.getElementById("treaty-duration").value),
+    duration: Number(state.turnDraft?.treaty?.duration ?? document.getElementById("treaty-duration").value),
   };
 
   const treatyResponses = Array.from(document.querySelectorAll(".treaty-response-select"))
-    .map((select) => ({ offerId: Number(select.dataset.offerId), response: select.value }))
+    .map((select) => ({
+      offerId: Number(select.dataset.offerId),
+      response: state.turnDraft?.treatyResponses?.[select.dataset.offerId] ?? select.value,
+    }))
     .filter((entry) => entry.response);
 
   const actions = [];
   for (let index = 0; index < 8; index += 1) {
-    const type = document.getElementById(`action-type-${index}`)?.value || "";
+    const actionDraft = state.turnDraft?.actions?.[index] || null;
+    const type = actionDraft?.type || document.getElementById(`action-type-${index}`)?.value || "";
     if (!type) continue;
     if (type === "Distributed Assault") {
       const targets = [];
       for (let dist = 0; dist < 3; dist += 1) {
-        const targetSeat = optionalNumber(document.getElementById(`dist-target-${index}-${dist}`)?.value);
-        const targetTower = document.getElementById(`dist-tower-${index}-${dist}`)?.value || "";
-        const guess = document.getElementById(`dist-guess-${index}-${dist}`)?.value || "";
+        const distDraft = actionDraft?.targets?.[dist] || null;
+        const targetSeat = optionalNumber(distDraft?.targetSeat ?? document.getElementById(`dist-target-${index}-${dist}`)?.value);
+        const targetTower = (distDraft?.targetTower ?? document.getElementById(`dist-tower-${index}-${dist}`)?.value) || "";
+        const guess = (distDraft?.guess ?? document.getElementById(`dist-guess-${index}-${dist}`)?.value) || "";
         if (targetSeat !== null && targetTower) {
           targets.push({ targetSeat, targetTower, guess });
         }
@@ -365,9 +394,9 @@ function collectSubmission() {
     }
     actions.push({
       type,
-      targetSeat: optionalNumber(document.getElementById(`action-target-${index}`)?.value),
-      targetTower: document.getElementById(`action-tower-${index}`)?.value || "",
-      guess: document.getElementById(`action-guess-${index}`)?.value || "",
+      targetSeat: optionalNumber(actionDraft?.targetSeat ?? document.getElementById(`action-target-${index}`)?.value),
+      targetTower: (actionDraft?.targetTower ?? document.getElementById(`action-tower-${index}`)?.value) || "",
+      guess: (actionDraft?.guess ?? document.getElementById(`action-guess-${index}`)?.value) || "",
     });
   }
 
@@ -417,6 +446,11 @@ async function readyUp() {
       characters: collectCharacters(),
     },
   });
+  state.setupDraft = {
+    Parliament: "",
+    Base: "",
+    Office: "",
+  };
   await refreshState();
 }
 
@@ -429,7 +463,114 @@ async function submitTurn() {
       submission: collectSubmission(),
     },
   });
+  state.turnDraft = null;
   await refreshState();
+}
+
+function createEmptyTurnDraft(snapshot) {
+  return {
+    day: snapshot.game.displayDay,
+    treaty: { targetSeat: "", duration: "2" },
+    treatyResponses: {},
+    decision: {
+      type: "",
+      targetSeat: "",
+      payload: "",
+      guesses: { Parliament: "", Base: "", Office: "" },
+    },
+    actions: Array.from({ length: 8 }, () => ({
+      type: "",
+      targetSeat: "",
+      targetTower: "",
+      guess: "",
+      targets: Array.from({ length: 3 }, () => ({
+        targetSeat: "",
+        targetTower: "",
+        guess: "",
+      })),
+    })),
+  };
+}
+
+function hydrateTurnDraft(snapshot) {
+  const draft = state.turnDraft;
+  document.getElementById("treaty-target").value = draft.treaty.targetSeat;
+  document.getElementById("treaty-duration").value = draft.treaty.duration;
+  document.getElementById("decision-type").value = draft.decision.type;
+  document.getElementById("decision-target").value = draft.decision.targetSeat;
+  document.getElementById("decision-payload").value = draft.decision.payload;
+  snapshot.constants.towers.forEach((tower) => {
+    document.getElementById(`fe-${tower}`).value = draft.decision.guesses[tower];
+  });
+  document.querySelectorAll(".treaty-response-select").forEach((select) => {
+    select.value = draft.treatyResponses[select.dataset.offerId] || "";
+  });
+  for (let index = 0; index < 8; index += 1) {
+    const action = draft.actions[index];
+    document.getElementById(`action-type-${index}`).value = action.type;
+    document.getElementById(`action-target-${index}`).value = action.targetSeat;
+    document.getElementById(`action-tower-${index}`).value = action.targetTower;
+    document.getElementById(`action-guess-${index}`).value = action.guess;
+    for (let dist = 0; dist < 3; dist += 1) {
+      document.getElementById(`dist-target-${index}-${dist}`).value = action.targets[dist].targetSeat;
+      document.getElementById(`dist-tower-${index}-${dist}`).value = action.targets[dist].targetTower;
+      document.getElementById(`dist-guess-${index}-${dist}`).value = action.targets[dist].guess;
+    }
+  }
+}
+
+function bindTurnDraftEvents(snapshot) {
+  const draft = state.turnDraft;
+  document.getElementById("treaty-target").addEventListener("change", (event) => {
+    draft.treaty.targetSeat = event.target.value;
+  });
+  document.getElementById("treaty-duration").addEventListener("change", (event) => {
+    draft.treaty.duration = event.target.value;
+  });
+  document.querySelectorAll(".treaty-response-select").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      draft.treatyResponses[event.target.dataset.offerId] = event.target.value;
+    });
+  });
+  document.getElementById("decision-type").addEventListener("change", (event) => {
+    draft.decision.type = event.target.value;
+  });
+  document.getElementById("decision-target").addEventListener("change", (event) => {
+    draft.decision.targetSeat = event.target.value;
+  });
+  document.getElementById("decision-payload").addEventListener("change", (event) => {
+    draft.decision.payload = event.target.value;
+  });
+  snapshot.constants.towers.forEach((tower) => {
+    document.getElementById(`fe-${tower}`).addEventListener("change", (event) => {
+      draft.decision.guesses[tower] = event.target.value;
+    });
+  });
+  for (let index = 0; index < 8; index += 1) {
+    document.getElementById(`action-type-${index}`).addEventListener("change", (event) => {
+      draft.actions[index].type = event.target.value;
+    });
+    document.getElementById(`action-target-${index}`).addEventListener("change", (event) => {
+      draft.actions[index].targetSeat = event.target.value;
+    });
+    document.getElementById(`action-tower-${index}`).addEventListener("change", (event) => {
+      draft.actions[index].targetTower = event.target.value;
+    });
+    document.getElementById(`action-guess-${index}`).addEventListener("change", (event) => {
+      draft.actions[index].guess = event.target.value;
+    });
+    for (let dist = 0; dist < 3; dist += 1) {
+      document.getElementById(`dist-target-${index}-${dist}`).addEventListener("change", (event) => {
+        draft.actions[index].targets[dist].targetSeat = event.target.value;
+      });
+      document.getElementById(`dist-tower-${index}-${dist}`).addEventListener("change", (event) => {
+        draft.actions[index].targets[dist].targetTower = event.target.value;
+      });
+      document.getElementById(`dist-guess-${index}-${dist}`).addEventListener("change", (event) => {
+        draft.actions[index].targets[dist].guess = event.target.value;
+      });
+    }
+  }
 }
 
 function renderMoveGuide() {
