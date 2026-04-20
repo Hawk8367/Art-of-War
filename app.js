@@ -188,6 +188,15 @@ function nationOptions(snapshot, includeEmpty = true) {
   return `${includeEmpty ? '<option value="">None</option>' : ""}${options.join("")}`;
 }
 
+function fullExposureNationOptions(snapshot) {
+  const currentSeat = snapshot.game.playerSeat;
+  const used = snapshot.game.you.fullExposureUsed || {};
+  const options = snapshot.game.nations
+    .filter((nation) => nation.seat !== currentSeat)
+    .map((nation) => `<option value="${nation.seat}" ${used[nation.seat] ? "disabled" : ""}>${nation.nationName}${used[nation.seat] ? " (Used)" : ""}</option>`);
+  return `<option value="">None</option>${options.join("")}`;
+}
+
 function towerOptions() {
   return `<option value="">None</option><option value="Parliament">Parliament</option><option value="Base">Base</option><option value="Office">Office</option>`;
 }
@@ -202,6 +211,7 @@ function renderGame(snapshot) {
     state.turnDraft = createEmptyTurnDraft(snapshot);
   }
   const actionLimit = getAvailableActionLimit(snapshot);
+  const turnLocked = you.lastSubmittedDay === snapshot.game.displayDay;
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
   el.statusBanner.innerHTML = `
     <strong>${you.nationName}</strong>
@@ -303,7 +313,7 @@ function renderGame(snapshot) {
             </div>
             <div id="decision-exposure-wrap" class="hidden">
               <label class="compact-label" for="decision-target-exposure">Target Nation</label>
-              <select id="decision-target-exposure">${nationOptions(snapshot)}</select>
+              <select id="decision-target-exposure">${fullExposureNationOptions(snapshot)}</select>
               <div class="tower-grid">
                 ${snapshot.constants.towers.map((tower) => `
                   <div>
@@ -350,6 +360,15 @@ function renderGame(snapshot) {
   hydrateTurnDraft(snapshot);
   bindTurnDraftEvents(snapshot);
   updateActionAvailability(snapshot);
+  el.playerForm.querySelectorAll("select").forEach((select) => {
+    select.disabled = turnLocked || select.disabled;
+  });
+  const card = el.playerForm.querySelector(".action-card");
+  if (card) {
+    card.classList.toggle("submitted-card", turnLocked);
+  }
+  el.submitTurnButton.disabled = turnLocked;
+  el.submitTurnButton.textContent = turnLocked ? "Turn Submitted ✓" : "Submit Turn";
 }
 
 function renderLogs(snapshot) {
@@ -540,7 +559,6 @@ async function submitTurn() {
       submission: collectSubmission(),
     },
   });
-  state.turnDraft = null;
   window.alert("Turn submitted successfully.");
   await refreshState();
 }
