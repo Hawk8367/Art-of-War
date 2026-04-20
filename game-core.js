@@ -523,8 +523,13 @@ function resolveNationalDecisions(game, submissions, resolution) {
       addPlayerResult(resolution, entry.seat, "decision", `Successful: ${getNation(game, decision.targetSeat).nationName} ${decision.payload}`, "Priority Target");
     }
     if (decision.type === "Leader's Intervention" && decision.targetSeat !== null && decision.payload) {
-      resolution.leaderInterventions.push({ sourceSeat: entry.seat, targetSeat: decision.targetSeat, actionType: decision.payload });
-      addPlayerResult(resolution, entry.seat, "decision", `Successful: ${getNation(game, decision.targetSeat).nationName} ${decision.payload}`, "Leader's Intervention");
+      resolution.leaderInterventions.push({
+        sourceSeat: entry.seat,
+        targetSeat: decision.targetSeat,
+        targetNation: getNation(game, decision.targetSeat).nationName,
+        actionType: decision.payload,
+        triggered: false,
+      });
     }
     if (decision.type === "War Mobilization") {
       addPlayerResult(resolution, entry.seat, "decision", "Successful: +1 action", "War Mobilization");
@@ -569,7 +574,9 @@ function gatherActions(game, submissions, resolution) {
     const nation = getNation(game, entry.seat);
     const actions = filterRepeated(nation, entry.actions || []);
     actions.forEach((action) => {
-      if (resolution.leaderInterventions.some((intervention) => intervention.targetSeat === entry.seat && intervention.actionType === action.type)) {
+      const matchingIntervention = resolution.leaderInterventions.find((intervention) => intervention.targetSeat === entry.seat && intervention.actionType === action.type);
+      if (matchingIntervention) {
+        matchingIntervention.triggered = true;
         const category = ATTACK_ACTIONS.includes(action.type) ? "attack" : INTEL_ACTIONS.includes(action.type) ? "intel" : ["Sabotage", "Signal Jam", "Interception", "Counter"].includes(action.type) ? "jamming" : "defense";
         const text = ATTACK_ACTIONS.includes(action.type) && action.targetTower && action.targetSeat !== null
           ? `Failure on ${getNation(game, action.targetSeat).nationName} ${action.targetTower}`
@@ -594,6 +601,18 @@ function gatherActions(game, submissions, resolution) {
     });
   });
 
+  resolution.leaderInterventions.forEach((intervention) => {
+    addPlayerResult(
+      resolution,
+      intervention.sourceSeat,
+      "decision",
+      intervention.triggered
+        ? `Successful: ${intervention.targetNation} used ${intervention.actionType}`
+        : `Failure: ${intervention.targetNation} did not use ${intervention.actionType}`,
+      "Leader's Intervention"
+    );
+  });
+
   game.pendingSieges.forEach((siege) => {
     if (siege.dayToResolve === game.day) {
       resolution.attacks.push({ seat: siege.seat, type: "Queued Siege", targetSeat: siege.targetSeat, targetTower: siege.targetTower, guess: siege.guess });
@@ -609,8 +628,10 @@ function queueDefense(game, action, resolution) {
     addPlayerResult(resolution, action.seat, "defense", `Successful on ${action.targetTower}`, "Fortify");
   }
   if (action.type === "Repair" && action.targetTower) {
-    nation.towers[action.targetTower].hp = Math.min(game.towerMaxHp, nation.towers[action.targetTower].hp + 40);
-    addPlayerResult(resolution, action.seat, "defense", `Successful on ${action.targetTower}`, "Repair");
+    const before = nation.towers[action.targetTower].hp;
+    nation.towers[action.targetTower].hp = Math.min(game.towerMaxHp, before + 40);
+    const healed = nation.towers[action.targetTower].hp - before;
+    addPlayerResult(resolution, action.seat, "defense", `Successful on ${action.targetTower}: +${healed} HP`, "Repair");
   }
   if (action.type === "Evacuation" && action.targetTower) {
     resolution.evacuationMap[`${action.seat}:${action.targetTower}`] = true;
@@ -621,7 +642,7 @@ function queueDefense(game, action, resolution) {
     addPlayerResult(resolution, action.seat, "jamming", "Successful", "Signal Jam");
   }
   if (action.type === "Sabotage" && action.targetTower) {
-    const index = game.pendingSieges.findIndex((siege) => siege.dayToResolve === game.day + 1 && siege.targetSeat === action.seat && siege.targetTower === action.targetTower);
+    const index = game.pendingSieges.findIndex((siege) => siege.dayToResolve === game.day && siege.targetSeat === action.seat && siege.targetTower === action.targetTower);
     if (index >= 0) {
       game.pendingSieges.splice(index, 1);
       addPlayerResult(resolution, action.seat, "jamming", `Successful on ${action.targetTower}`, "Sabotage");
