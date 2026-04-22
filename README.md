@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/26986628/README.md)
 # Art of War
 
 This build now runs as a real multiplayer lobby game instead of a single-browser local simulator.

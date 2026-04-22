@@ -109,4 +109,152 @@ describe("game-core rules", () => {
       )
     ).toBe(true);
   });
+
+  it("splits day score evenly when both nations tie", () => {
+    const game = setupTwoPlayerGame();
+
+    resolveSubmittedDay(
+      game,
+      { actions: [] },
+      { actions: [] }
+    );
+
+    expect(game.players[0].score).toBe(25);
+    expect(game.players[1].score).toBe(25);
+    expect(
+      game.players[0].resolutionHistory[1].some((entry) => entry.includes("tied and split Day 1"))
+    ).toBe(true);
+  });
+
+  it("creates a treaty after mutual acceptance and blocks attacks while active", () => {
+    const game = setupTwoPlayerGame();
+
+    resolveSubmittedDay(
+      game,
+      {
+        treaty: { targetSeat: 1, duration: 1 },
+        actions: [],
+      },
+      {
+        treaty: { targetSeat: 0, duration: 3 },
+        actions: [],
+      }
+    );
+
+    resolveSubmittedDay(
+      game,
+      {
+        treatyResponses: [{ offerId: 2, response: "accept" }],
+        actions: [{ type: "Strike", targetSeat: 1, targetTower: "Parliament" }],
+      },
+      {
+        treatyResponses: [{ offerId: 1, response: "accept" }],
+        actions: [],
+      }
+    );
+
+    expect(game.players[1].towers.Parliament.hp).toBe(200);
+    expect(game.treaties.some((treaty) => treaty.active && treaty.remaining === 2)).toBe(true);
+    expect(
+      game.players[0].resolutionHistory[2].some((entry) =>
+        entry.includes("Strike: Failure")
+        && entry.includes("Active treaty with this nation is now broken")
+      )
+    ).toBe(true);
+  });
+
+  it("counter blocks only the first incoming attack and reflects 60 damage", () => {
+    const game = setupTwoPlayerGame();
+
+    resolveSubmittedDay(
+      game,
+      {
+        actions: [
+          { type: "Strike", targetSeat: 1, targetTower: "Parliament" },
+          { type: "Target Strike", targetSeat: 1, targetTower: "Parliament", guess: "Aster" },
+        ],
+      },
+      {
+        actions: [{ type: "Counter" }],
+      }
+    );
+
+    expect(game.players[0].towers.Parliament.hp).toBe(140);
+    expect(game.players[1].towers.Parliament.hp).toBe(160);
+    expect(
+      game.players[0].resolutionHistory[1].some((entry) => entry.includes("Strike: Failure") && entry.includes("Countered"))
+    ).toBe(true);
+    expect(
+      game.players[0].resolutionHistory[1].some((entry) => entry.includes("Target Strike: Successful"))
+    ).toBe(true);
+  });
+
+  it("distributed assault damages three different towers and rewards a correct guess", () => {
+    const game = setupTwoPlayerGame();
+
+    resolveSubmittedDay(
+      game,
+      {
+        actions: [{
+          type: "Distributed Assault",
+          targets: [
+            { targetSeat: 1, targetTower: "Parliament", guess: "Dorian" },
+            { targetSeat: 1, targetTower: "Base", guess: "" },
+            { targetSeat: 1, targetTower: "Office", guess: "" },
+          ],
+        }],
+      },
+      { actions: [] }
+    );
+
+    expect(game.players[1].towers.Parliament.hp).toBe(175);
+    expect(game.players[1].towers.Base.hp).toBe(185);
+    expect(game.players[1].towers.Office.hp).toBe(185);
+    expect(
+      game.players[0].resolutionHistory[1].some((entry) =>
+        entry.includes("Distributed Assault:")
+        && entry.includes("Parliament: 25 damage")
+        && entry.includes("Base: 15 damage")
+        && entry.includes("Office: 15 damage")
+      )
+    ).toBe(true);
+  });
+
+  it("full exposure grants gold once for a nation and does not pay again on reuse", () => {
+    const game = setupTwoPlayerGame();
+    const startingGold = game.players[0].gold;
+
+    resolveSubmittedDay(
+      game,
+      {
+        decision: {
+          type: "Full Exposure",
+          targetSeat: 1,
+          guess: ["Dorian", "Eira", "Fen"],
+        },
+        actions: [],
+      },
+      { actions: [] }
+    );
+
+    const goldAfterFirst = game.players[0].gold;
+    expect(goldAfterFirst).toBe(startingGold + 200 + 25 + 25 + 50 + 25);
+
+    resolveSubmittedDay(
+      game,
+      {
+        decision: {
+          type: "Full Exposure",
+          targetSeat: 1,
+          guess: ["Dorian", "Eira", "Fen"],
+        },
+        actions: [],
+      },
+      { actions: [] }
+    );
+
+    const secondDayGain = game.players[0].gold - goldAfterFirst;
+    expect(secondDayGain).toBe(125);
+    expect(game.players[0].fullExposureUsed[1]).toBe(true);
+  });
 });
