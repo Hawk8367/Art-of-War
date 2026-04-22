@@ -161,8 +161,8 @@ test("players can submit turns and see logs update after day resolution", async 
 
   await expect(hostPage.locator(".orders-queue")).toContainText("Strike");
   await hostPage.locator('[data-submit-turn="1"]').click();
-  await expect(hostPage.locator(".arena-board")).toHaveClass(/submitted-card/);
   await expect(hostPage.locator('[data-submit-turn="1"]')).toContainText("Turn Submitted");
+  await expect(hostPage.locator('[data-submit-turn="1"]')).toBeDisabled();
 
   await guestPage.locator('[data-submit-turn="1"]').click();
 
