@@ -901,6 +901,7 @@ module.exports = {
   DEFENSE_ACTIONS,
   INTEL_ACTIONS,
   NATIONAL_DECISIONS,
+  createGame,
   createLobby,
   getPlayerRecord,
   getNation,
