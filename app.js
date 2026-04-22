@@ -1319,7 +1319,7 @@ async function readyUp() {
 }
 
 async function submitTurn() {
-  await api("/api/submit", {
+  const snapshot = await api("/api/submit", {
     method: "POST",
     body: {
       lobbyId: state.lobbyId,
@@ -1327,8 +1327,10 @@ async function submitTurn() {
       submission: collectSubmission(),
     },
   });
+  state.turnUi.pending = null;
+  state.turnUi.popup = null;
+  applySnapshot(snapshot);
   window.alert("Turn submitted successfully.");
-  await refreshState();
 }
 
 function createEmptyTurnDraft(snapshot) {
