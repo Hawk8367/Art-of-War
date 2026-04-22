@@ -13,8 +13,49 @@ const state = {
     Office: "",
   },
   turnDraft: null,
+  turnUi: {
+    selectedCategory: "attack",
+    pending: null,
+    popup: null,
+  },
   lastSeenDisplayDay: null,
 };
+
+const JAMMING_ACTIONS = ["Sabotage", "Signal Jam", "Interception", "Counter"];
+const CORE_DEFENSE_ACTIONS = ["Fortify", "Repair", "Evacuation"];
+const NATION_COLORS = ["azure", "verdant", "amber", "crimson"];
+const MOVE_COSTS = {
+  Strike: 30,
+  "Target Strike": 40,
+  "Siege Operation": 80,
+  "Coordinated Assault": 45,
+  "Distributed Assault": 50,
+  Fortify: 45,
+  Repair: 30,
+  Evacuation: 70,
+  Sabotage: 50,
+  "Signal Jam": 40,
+  Interception: 50,
+  Counter: 70,
+  "Deep Surveillance": 100,
+  "Identity Check": 40,
+  "Move Check": 60,
+  "War Mobilization": 0,
+  "Strategic Reserve": 0,
+  "Full Exposure": 0,
+  "Priority Target": 30,
+  "Leader's Intervention": 65,
+  "Total Mobilization": 150,
+  "Expanded Command": 70,
+};
+
+function resetTurnUi() {
+  state.turnUi = {
+    selectedCategory: "attack",
+    pending: null,
+    popup: null,
+  };
+}
 
 const moveDescriptions = {
   Strike: "30 gold. Deal 30 damage to one target tower.",
@@ -124,6 +165,12 @@ async function refreshState() {
 function applySnapshot(snapshot) {
   const previousDay = state.snapshot?.game?.displayDay ?? state.lastSeenDisplayDay;
   const wasStarted = state.snapshot?.game?.started;
+  if (!state.turnUi) {
+    resetTurnUi();
+  }
+  if (previousDay !== null && snapshot.game.displayDay !== previousDay) {
+    resetTurnUi();
+  }
   state.snapshot = snapshot;
   state.pendingSnapshot = null;
   state.inviteLink = `${window.location.origin}/?lobby=${snapshot.lobbyId}`;
@@ -205,7 +252,750 @@ function characterOptions(optionalLabel = "None") {
   return `<option value="">${optionalLabel}</option>${state.snapshot.constants.characters.map((character) => `<option value="${character}">${character}</option>`).join("")}`;
 }
 
+function getUsedActionCount() {
+  return state.turnDraft.actions.filter((action) => action.type).length;
+}
+
+function getRemainingActionCount(snapshot) {
+  return Math.max(0, getAvailableActionLimit(snapshot) - getUsedActionCount());
+}
+
+function compactActionDraft(action) {
+  return {
+    type: action.type,
+    targetSeat: action.targetSeat ?? "",
+    targetTower: action.targetTower ?? "",
+    guess: action.guess ?? "",
+    targets: Array.from({ length: 3 }, (_, index) => ({
+      targetSeat: action.targets?.[index]?.targetSeat ?? "",
+      targetTower: action.targets?.[index]?.targetTower ?? "",
+      guess: action.targets?.[index]?.guess ?? "",
+    })),
+  };
+}
+
+function addDraftAction(snapshot, action) {
+  const nextIndex = state.turnDraft.actions.findIndex((entry) => !entry.type);
+  if (nextIndex === -1 || getRemainingActionCount(snapshot) <= 0) return false;
+  state.turnDraft.actions[nextIndex] = compactActionDraft(action);
+  return true;
+}
+
+function removeDraftAction(index) {
+  state.turnDraft.actions.splice(index, 1);
+  state.turnDraft.actions.push(createEmptyActionDraft());
+}
+
+function clearDecisionDraft() {
+  state.turnDraft.decision = {
+    type: "",
+    targetSeat: "",
+    payload: "",
+    guesses: { Parliament: "", Base: "", Office: "" },
+  };
+}
+
+function getMoveCategory(type) {
+  if (type === "decision") return "decision";
+  if (JAMMING_ACTIONS.includes(type)) return "jamming";
+  if (CORE_DEFENSE_ACTIONS.includes(type)) return "defense";
+  if (state.snapshot.constants.attackActions.includes(type)) return "attack";
+  if (state.snapshot.constants.intelActions.includes(type)) return "intel";
+  return "";
+}
+
+function getMovesForCategory(snapshot, category) {
+  if (category === "decision") return snapshot.constants.nationalDecisions;
+  if (category === "attack") return snapshot.constants.attackActions;
+  if (category === "intel") return snapshot.constants.intelActions;
+  if (category === "jamming") return JAMMING_ACTIONS;
+  if (category === "defense") return CORE_DEFENSE_ACTIONS;
+  return [];
+}
+
+function getArenaSeatLayout(playerCount) {
+  const layouts = {
+    2: [
+      { x: 50, y: 16 },
+      { x: 50, y: 70 },
+    ],
+    3: [
+      { x: 50, y: 14 },
+      { x: 23, y: 58 },
+      { x: 77, y: 58 },
+    ],
+    4: [
+      { x: 50, y: 12 },
+      { x: 80, y: 42 },
+      { x: 50, y: 72 },
+      { x: 20, y: 42 },
+    ],
+  };
+  return layouts[playerCount] || layouts[4];
+}
+
+function getTowerTotalHp(towers) {
+  return Object.values(towers).reduce((sum, tower) => sum + tower.hp, 0);
+}
+
+function getTowerBadgeText(snapshot, nation, towerName, data) {
+  if (nation.seat === snapshot.game.playerSeat) {
+    return `${data.hp} HP`;
+  }
+  return data.hp > 0 ? "Alive" : "Destroyed";
+}
+
+function getPendingInstruction(snapshot) {
+  const pending = state.turnUi.pending;
+  if (!pending) return `Choose a category below. ${getRemainingActionCount(snapshot)} action(s) remaining.`;
+  if (pending.kind === "towerAction") {
+    return pending.scope === "self"
+      ? `Select one of your towers for ${pending.moveType}.`
+      : `Select a target tower for ${pending.moveType}.`;
+  }
+  if (pending.kind === "distributed") {
+    return `Select target ${pending.targets.length + 1} of 3 for Distributed Assault.`;
+  }
+  if (pending.kind === "priorityDecision") {
+    return "Select the enemy tower for Priority Target.";
+  }
+  return "Complete the active selection.";
+}
+
+function isMoveAlreadyUsed(snapshot, moveType) {
+  if (snapshot.game.you.totalMobilization) return false;
+  return state.turnDraft.actions.some((action) => action.type === moveType);
+}
+
+function isTowerSelectable(snapshot, nation, towerName, towerData) {
+  const pending = state.turnUi.pending;
+  if (!pending || towerData.hp <= 0) return false;
+  if (pending.kind === "priorityDecision") {
+    return nation.seat !== snapshot.game.playerSeat;
+  }
+  if (pending.kind === "towerAction") {
+    return pending.scope === "self"
+      ? nation.seat === snapshot.game.playerSeat
+      : nation.seat !== snapshot.game.playerSeat;
+  }
+  if (pending.kind === "distributed") {
+    if (nation.seat === snapshot.game.playerSeat) return false;
+    return !pending.targets.some((target) => target.targetSeat === nation.seat && target.targetTower === towerName);
+  }
+  return false;
+}
+
+function renderOrdersQueue(snapshot, turnLocked) {
+  const actionEntries = state.turnDraft.actions
+    .map((action, index) => ({ action, index }))
+    .filter(({ action }) => action.type);
+  const decision = state.turnDraft.decision.type
+    ? `<div class="order-pill order-pill-decision">
+        <div>
+          <strong>National Decision</strong>
+          <span>${state.turnDraft.decision.type}</span>
+        </div>
+        ${turnLocked ? "" : '<button type="button" class="order-remove" data-clear-decision="1">Clear</button>'}
+      </div>`
+    : "";
+  const actions = actionEntries.map(({ action, index }) => `
+    <div class="order-pill">
+      <div>
+        <strong>${action.type}</strong>
+        <span>${describeQueuedAction(snapshot, action)}</span>
+      </div>
+      ${turnLocked ? "" : `<button type="button" class="order-remove" data-remove-action="${index}">Clear</button>`}
+    </div>
+  `).join("");
+  return decision || actions
+    ? `<div class="orders-queue">${decision}${actions}</div>`
+    : `<div class="meta-text">No orders queued yet.</div>`;
+}
+
+function describeQueuedAction(snapshot, action) {
+  if (action.type === "Distributed Assault") {
+    return action.targets.filter((target) => target.targetSeat !== "").map((target) => {
+      const nation = snapshot.game.nations.find((entry) => entry.seat === Number(target.targetSeat));
+      return `${nation?.nationName || "Unknown"} ${target.targetTower}`;
+    }).join(" | ");
+  }
+  if (action.targetSeat !== "" && action.targetTower) {
+    const nation = snapshot.game.nations.find((entry) => entry.seat === Number(action.targetSeat));
+    return `${nation?.nationName || "Unknown"} ${action.targetTower}`;
+  }
+  if (action.targetTower) return action.targetTower;
+  if (action.targetSeat !== "") {
+    const nation = snapshot.game.nations.find((entry) => entry.seat === Number(action.targetSeat));
+    return nation?.nationName || "Unknown";
+  }
+  return "Ready";
+}
+
+function renderArena(snapshot) {
+  const layout = getArenaSeatLayout(snapshot.game.playerCount);
+  return snapshot.game.nations.map((nation, index) => {
+    const position = layout[index] || layout[layout.length - 1];
+    const colorClass = `nation-${NATION_COLORS[index % NATION_COLORS.length]}`;
+    return `
+      <div class="arena-nation ${nation.seat === snapshot.game.playerSeat ? "is-self" : ""}" style="left:${position.x}%;top:${position.y}%;">
+        <div class="arena-nation-name">${nation.nationName}</div>
+        <div class="arena-cluster ${colorClass}">
+          ${["Parliament", "Base", "Office"].map((towerName) => {
+            const tower = nation.towers[towerName];
+            const selectable = isTowerSelectable(snapshot, nation, towerName, tower);
+            return `
+              <button
+                type="button"
+                class="arena-tower ${tower.hp <= 0 ? "is-destroyed" : ""} ${selectable ? "is-selectable" : ""}"
+                data-tower-seat="${nation.seat}"
+                data-tower-name="${towerName}"
+                ${selectable ? "" : "disabled"}
+              >
+                <span class="arena-tower-name">${towerName}</span>
+                <span class="arena-tower-meta">${getTowerBadgeText(snapshot, nation, towerName, tower)}</span>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderCategoryDock(snapshot, turnLocked) {
+  const remaining = getRemainingActionCount(snapshot);
+  const categoryMeta = [
+    { key: "decision", label: "National Decision", disabled: turnLocked || Boolean(state.turnDraft.decision.type) },
+    { key: "intel", label: "Intel", disabled: turnLocked || remaining === 0 },
+    { key: "jamming", label: "Jamming", disabled: turnLocked || remaining === 0 },
+    { key: "attack", label: "Attack", disabled: turnLocked || remaining === 0 },
+    { key: "defense", label: "Defense", disabled: turnLocked || remaining === 0 },
+  ];
+  return `
+    <div class="arena-dock">
+      ${categoryMeta.map((category) => `
+        <button
+          type="button"
+          class="dock-button ${state.turnUi.selectedCategory === category.key ? "is-active" : ""}"
+          data-category="${category.key}"
+          ${category.disabled ? "disabled" : ""}
+        >
+          <span>${category.label}</span>
+          <strong>${category.key === "decision" ? (state.turnDraft.decision.type ? "Locked" : "Ready") : `${remaining} left`}</strong>
+        </button>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderMoveTray(snapshot, turnLocked) {
+  const category = state.turnUi.selectedCategory || "attack";
+  const moves = getMovesForCategory(snapshot, category);
+  if (!moves.length) return "";
+  return `
+    <div class="move-tray">
+      ${moves.map((move) => {
+        const disabled = turnLocked
+          || (category !== "decision" && getRemainingActionCount(snapshot) === 0)
+          || (category === "decision" && Boolean(state.turnDraft.decision.type))
+          || (category !== "decision" && isMoveAlreadyUsed(snapshot, move));
+        return `
+          <button type="button" class="move-chip" data-move="${move}" ${disabled ? "disabled" : ""}>
+            <span>${move}</span>
+            <strong>${MOVE_COSTS[move] === 0 ? "Free" : `${MOVE_COSTS[move]}g`}</strong>
+          </button>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
+function renderDiplomacyPanel(snapshot, turnLocked) {
+  const you = snapshot.game.you;
+  return `
+    <div class="arena-sidecard">
+      <div class="sidecard-header">
+        <h3>Diplomacy</h3>
+        <span class="meta-text">Treaties and responses</span>
+      </div>
+      ${you.activeTreaties.length
+        ? `<div class="treaty-list">${you.activeTreaties.map((treaty) => `<div class="treaty-entry">Active with ${treaty.withNation}: ${treaty.remaining} day(s)</div>`).join("")}</div>`
+        : `<div class="meta-text">No active treaties.</div>`}
+      <div class="diplomacy-row">
+        <select id="treaty-target-arena" ${turnLocked ? "disabled" : ""}>${nationOptions(snapshot)}</select>
+        <select id="treaty-duration-arena" ${turnLocked ? "disabled" : ""}>
+          <option value="1">1 day</option>
+          <option value="2">2 days</option>
+          <option value="3">3 days</option>
+        </select>
+      </div>
+      ${you.incomingTreaties.map((offer) => `
+        <div class="treaty-entry">
+          <span>${offer.fromNation} proposed ${offer.duration} day(s)</span>
+          <select class="treaty-response-select" data-offer-id="${offer.offerId}" ${turnLocked ? "disabled" : ""}>
+            <option value="">No response</option>
+            <option value="accept">Accept</option>
+            <option value="decline">Decline</option>
+          </select>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderPopup(snapshot) {
+  const popup = state.turnUi.popup;
+  if (!popup) return "";
+  if (popup.type === "guessAfterTowerAction") {
+    return `
+      <div class="arena-popup-backdrop"></div>
+      <div class="arena-popup">
+        <h3>${popup.moveType}</h3>
+        <p class="meta-text">Choose the character guess for ${popup.targetTower}.</p>
+        <select id="arena-popup-guess">${characterOptions("Select character")}</select>
+        <div class="popup-actions">
+          <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
+          <button type="button" class="primary-button" data-popup-submit="guessAfterTowerAction">Confirm</button>
+        </div>
+      </div>
+    `;
+  }
+  if (popup.type === "nationOnlyAction") {
+    return `
+      <div class="arena-popup-backdrop"></div>
+      <div class="arena-popup">
+        <h3>${popup.moveType}</h3>
+        <p class="meta-text">Choose a target nation.</p>
+        <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
+        <div class="popup-actions">
+          <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
+          <button type="button" class="primary-button" data-popup-submit="nationOnlyAction">Confirm</button>
+        </div>
+      </div>
+    `;
+  }
+  if (popup.type === "identityCheck") {
+    return `
+      <div class="arena-popup-backdrop"></div>
+      <div class="arena-popup">
+        <h3>Identity Check</h3>
+        <p class="meta-text">Choose a nation and character.</p>
+        <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
+        <select id="arena-popup-guess">${characterOptions("Select character")}</select>
+        <div class="popup-actions">
+          <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
+          <button type="button" class="primary-button" data-popup-submit="identityCheck">Confirm</button>
+        </div>
+      </div>
+    `;
+  }
+  if (popup.type === "distributedGuess") {
+    return `
+      <div class="arena-popup-backdrop"></div>
+      <div class="arena-popup">
+        <h3>Distributed Assault</h3>
+        <p class="meta-text">Optional guess for target ${popup.targets.length + 1} of 3.</p>
+        <select id="arena-popup-guess">${characterOptions("No guess")}</select>
+        <div class="popup-actions">
+          <button type="button" class="secondary-button" data-popup-cancel="distributedGuess">Back</button>
+          <button type="button" class="primary-button" data-popup-submit="distributedGuess">Next</button>
+        </div>
+      </div>
+    `;
+  }
+  if (popup.type === "intervention") {
+    return `
+      <div class="arena-popup-backdrop"></div>
+      <div class="arena-popup">
+        <h3>Leader's Intervention</h3>
+        <p class="meta-text">Choose a nation and one action to block.</p>
+        <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
+        <select id="arena-popup-action">
+          <option value="">Select action</option>
+          ${[...snapshot.constants.attackActions, ...CORE_DEFENSE_ACTIONS, ...JAMMING_ACTIONS, ...snapshot.constants.intelActions].map((action) => `<option value="${action}">${action}</option>`).join("")}
+        </select>
+        <div class="popup-actions">
+          <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
+          <button type="button" class="primary-button" data-popup-submit="intervention">Confirm</button>
+        </div>
+      </div>
+    `;
+  }
+  if (popup.type === "fullExposure") {
+    return `
+      <div class="arena-popup-backdrop"></div>
+      <div class="arena-popup">
+        <h3>Full Exposure</h3>
+        <p class="meta-text">Choose a nation and all three guesses.</p>
+        <select id="arena-popup-nation">${fullExposureNationOptions(snapshot)}</select>
+        ${snapshot.constants.towers.map((tower) => `
+          <label class="compact-label" for="arena-popup-${tower}">${tower}</label>
+          <select id="arena-popup-${tower}">${characterOptions("Select character")}</select>
+        `).join("")}
+        <div class="popup-actions">
+          <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
+          <button type="button" class="primary-button" data-popup-submit="fullExposure">Confirm</button>
+        </div>
+      </div>
+    `;
+  }
+  return "";
+}
+
 function renderGame(snapshot) {
+  const you = snapshot.game.you;
+  if (!state.turnDraft || state.turnDraft.day !== snapshot.game.displayDay) {
+    state.turnDraft = createEmptyTurnDraft(snapshot);
+    resetTurnUi();
+  }
+  const turnLocked = you.lastSubmittedDay === snapshot.game.displayDay;
+  el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
+  el.statusBanner.innerHTML = `<span class="meta-text">${getPendingInstruction(snapshot)}</span>`;
+  el.scoreboard.innerHTML = "";
+  el.scoreboard.classList.add("hidden");
+  el.submitTurnButton.classList.add("hidden");
+
+  el.playerForm.className = "arena-shell";
+  el.playerForm.innerHTML = `
+    <section class="arena-board ${turnLocked ? "submitted-card" : ""}">
+      <div class="arena-hud">
+        <div class="arena-stat left">
+          <span>Points</span>
+          <strong>${you.score}</strong>
+        </div>
+        <div class="arena-title">
+          <strong>${you.nationName}</strong>
+          <span>${getUsedActionCount()} / ${getAvailableActionLimit(snapshot)} orders used</span>
+        </div>
+        <div class="arena-stat right">
+          <span>Total HP</span>
+          <strong>${getTowerTotalHp(you.towers)}</strong>
+        </div>
+      </div>
+
+      <div class="arena-field">
+        ${renderArena(snapshot)}
+      </div>
+
+      <div class="arena-lower">
+        <div class="arena-side">
+          ${renderDiplomacyPanel(snapshot, turnLocked)}
+          <div class="arena-sidecard">
+            <div class="sidecard-header">
+              <h3>Queued Orders</h3>
+              <span class="meta-text">${getRemainingActionCount(snapshot)} action(s) left</span>
+            </div>
+            ${renderOrdersQueue(snapshot, turnLocked)}
+          </div>
+        </div>
+
+        <div class="arena-command">
+          ${renderCategoryDock(snapshot, turnLocked)}
+          ${renderMoveTray(snapshot, turnLocked)}
+          <div class="command-actions">
+            <button type="button" class="secondary-button" data-cancel-selection="1" ${state.turnUi.pending || state.turnUi.popup ? "" : "disabled"}>Cancel Selection</button>
+            <button type="button" class="primary-button" data-submit-turn="1" ${turnLocked ? "disabled" : ""}>${turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
+          </div>
+        </div>
+      </div>
+
+      ${renderPopup(snapshot)}
+    </section>
+  `;
+
+  bindArenaEvents(snapshot, turnLocked);
+}
+
+function bindArenaEvents(snapshot, turnLocked) {
+  document.getElementById("treaty-target-arena")?.addEventListener("change", (event) => {
+    state.turnDraft.treaty.targetSeat = event.target.value;
+  });
+  document.getElementById("treaty-duration-arena")?.addEventListener("change", (event) => {
+    state.turnDraft.treaty.duration = event.target.value;
+  });
+  el.playerForm.querySelectorAll(".treaty-response-select").forEach((select) => {
+    select.addEventListener("change", (event) => {
+      state.turnDraft.treatyResponses[event.target.dataset.offerId] = event.target.value;
+    });
+  });
+  el.playerForm.querySelectorAll("[data-category]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.turnUi.selectedCategory = button.dataset.category;
+      state.turnUi.pending = null;
+      state.turnUi.popup = null;
+      renderGame(snapshot);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-move]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handleMoveSelection(snapshot, button.dataset.move);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-tower-seat]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handleTowerSelection(snapshot, Number(button.dataset.towerSeat), button.dataset.towerName);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-remove-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      removeDraftAction(Number(button.dataset.removeAction));
+      renderGame(snapshot);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-clear-decision]").forEach((button) => {
+    button.addEventListener("click", () => {
+      clearDecisionDraft();
+      renderGame(snapshot);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-popup-cancel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.dataset.popupCancel === "distributedGuess" && state.turnUi.pending?.kind === "distributed") {
+        state.turnUi.popup = null;
+        renderGame(snapshot);
+        return;
+      }
+      state.turnUi.pending = null;
+      state.turnUi.popup = null;
+      renderGame(snapshot);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-popup-submit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      handlePopupSubmit(snapshot, button.dataset.popupSubmit);
+    });
+  });
+  el.playerForm.querySelectorAll("[data-submit-turn]").forEach((button) => {
+    button.addEventListener("click", () => submitTurn().catch((error) => window.alert(error.message)));
+  });
+  el.playerForm.querySelectorAll("[data-cancel-selection]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.turnUi.pending = null;
+      state.turnUi.popup = null;
+      renderGame(snapshot);
+    });
+  });
+  if (turnLocked) {
+    return;
+  }
+}
+
+function handleMoveSelection(snapshot, moveType) {
+  if (state.turnDraft.day !== snapshot.game.displayDay) {
+    state.turnDraft = createEmptyTurnDraft(snapshot);
+  }
+  const category = getMoveCategory(moveType);
+  if (category !== "decision" && getRemainingActionCount(snapshot) <= 0) return;
+  if (category !== "decision" && isMoveAlreadyUsed(snapshot, moveType)) return;
+  if (category === "decision" && state.turnDraft.decision.type) return;
+
+  state.turnUi.pending = null;
+  state.turnUi.popup = null;
+
+  if (category === "decision") {
+    if (["War Mobilization", "Strategic Reserve", "Total Mobilization", "Expanded Command"].includes(moveType)) {
+      state.turnDraft.decision = {
+        type: moveType,
+        targetSeat: "",
+        payload: "",
+        guesses: { Parliament: "", Base: "", Office: "" },
+      };
+      renderGame(snapshot);
+      return;
+    }
+    if (moveType === "Priority Target") {
+      state.turnUi.pending = { kind: "priorityDecision", moveType };
+      renderGame(snapshot);
+      return;
+    }
+    if (moveType === "Leader's Intervention") {
+      state.turnUi.popup = { type: "intervention", moveType };
+      renderGame(snapshot);
+      return;
+    }
+    if (moveType === "Full Exposure") {
+      state.turnUi.popup = { type: "fullExposure", moveType };
+      renderGame(snapshot);
+      return;
+    }
+    return;
+  }
+
+  if (["Signal Jam", "Counter"].includes(moveType)) {
+    addDraftAction(snapshot, { type: moveType });
+    renderGame(snapshot);
+    return;
+  }
+  if (["Interception", "Move Check"].includes(moveType)) {
+    state.turnUi.popup = { type: "nationOnlyAction", moveType };
+    renderGame(snapshot);
+    return;
+  }
+  if (moveType === "Identity Check") {
+    state.turnUi.popup = { type: "identityCheck", moveType };
+    renderGame(snapshot);
+    return;
+  }
+  if (moveType === "Distributed Assault") {
+    state.turnUi.pending = { kind: "distributed", moveType, targets: [] };
+    renderGame(snapshot);
+    return;
+  }
+  if (["Fortify", "Repair", "Evacuation", "Sabotage"].includes(moveType)) {
+    state.turnUi.pending = { kind: "towerAction", moveType, scope: "self" };
+    renderGame(snapshot);
+    return;
+  }
+  state.turnUi.pending = { kind: "towerAction", moveType, scope: "enemy" };
+  renderGame(snapshot);
+}
+
+function handleTowerSelection(snapshot, seat, towerName) {
+  const pending = state.turnUi.pending;
+  if (!pending) return;
+  if (pending.kind === "priorityDecision") {
+    state.turnDraft.decision = {
+      type: "Priority Target",
+      targetSeat: String(seat),
+      payload: towerName,
+      guesses: { Parliament: "", Base: "", Office: "" },
+    };
+    state.turnUi.pending = null;
+    renderGame(snapshot);
+    return;
+  }
+  if (pending.kind === "towerAction") {
+    if (pending.scope === "self" && seat !== snapshot.game.playerSeat) return;
+    if (pending.scope === "enemy" && seat === snapshot.game.playerSeat) return;
+    if (["Target Strike", "Siege Operation"].includes(pending.moveType)) {
+      state.turnUi.popup = {
+        type: "guessAfterTowerAction",
+        moveType: pending.moveType,
+        targetSeat: seat,
+        targetTower: towerName,
+      };
+      renderGame(snapshot);
+      return;
+    }
+    addDraftAction(snapshot, {
+      type: pending.moveType,
+      targetSeat: pending.scope === "enemy" ? String(seat) : "",
+      targetTower: towerName,
+      guess: "",
+    });
+    state.turnUi.pending = null;
+    renderGame(snapshot);
+    return;
+  }
+  if (pending.kind === "distributed") {
+    if (seat === snapshot.game.playerSeat) return;
+    if (pending.targets.some((target) => target.targetSeat === String(seat) && target.targetTower === towerName)) return;
+    state.turnUi.popup = {
+      type: "distributedGuess",
+      moveType: pending.moveType,
+      pendingTargetSeat: seat,
+      pendingTargetTower: towerName,
+      targets: pending.targets.slice(),
+    };
+    renderGame(snapshot);
+  }
+}
+
+function handlePopupSubmit(snapshot, popupType) {
+  if (popupType === "guessAfterTowerAction") {
+    const guess = document.getElementById("arena-popup-guess")?.value || "";
+    const popup = state.turnUi.popup;
+    if (!guess || !popup) return;
+    addDraftAction(snapshot, {
+      type: popup.moveType,
+      targetSeat: String(popup.targetSeat),
+      targetTower: popup.targetTower,
+      guess,
+    });
+    state.turnUi.pending = null;
+    state.turnUi.popup = null;
+    renderGame(snapshot);
+    return;
+  }
+  if (popupType === "nationOnlyAction") {
+    const nation = document.getElementById("arena-popup-nation")?.value || "";
+    const popup = state.turnUi.popup;
+    if (!nation || !popup) return;
+    addDraftAction(snapshot, {
+      type: popup.moveType,
+      targetSeat: nation,
+    });
+    state.turnUi.popup = null;
+    renderGame(snapshot);
+    return;
+  }
+  if (popupType === "identityCheck") {
+    const nation = document.getElementById("arena-popup-nation")?.value || "";
+    const guess = document.getElementById("arena-popup-guess")?.value || "";
+    if (!nation || !guess) return;
+    addDraftAction(snapshot, {
+      type: "Identity Check",
+      targetSeat: nation,
+      guess,
+    });
+    state.turnUi.popup = null;
+    renderGame(snapshot);
+    return;
+  }
+  if (popupType === "distributedGuess") {
+    const popup = state.turnUi.popup;
+    if (!popup || state.turnUi.pending?.kind !== "distributed") return;
+    const guess = document.getElementById("arena-popup-guess")?.value || "";
+    state.turnUi.pending.targets.push({
+      targetSeat: String(popup.pendingTargetSeat),
+      targetTower: popup.pendingTargetTower,
+      guess,
+    });
+    state.turnUi.popup = null;
+    if (state.turnUi.pending.targets.length === 3) {
+      addDraftAction(snapshot, {
+        type: "Distributed Assault",
+        targets: state.turnUi.pending.targets,
+      });
+      state.turnUi.pending = null;
+    }
+    renderGame(snapshot);
+    return;
+  }
+  if (popupType === "intervention") {
+    const nation = document.getElementById("arena-popup-nation")?.value || "";
+    const action = document.getElementById("arena-popup-action")?.value || "";
+    if (!nation || !action) return;
+    state.turnDraft.decision = {
+      type: "Leader's Intervention",
+      targetSeat: nation,
+      payload: action,
+      guesses: { Parliament: "", Base: "", Office: "" },
+    };
+    state.turnUi.popup = null;
+    renderGame(snapshot);
+    return;
+  }
+  if (popupType === "fullExposure") {
+    const nation = document.getElementById("arena-popup-nation")?.value || "";
+    const guesses = {
+      Parliament: document.getElementById("arena-popup-Parliament")?.value || "",
+      Base: document.getElementById("arena-popup-Base")?.value || "",
+      Office: document.getElementById("arena-popup-Office")?.value || "",
+    };
+    if (!nation || Object.values(guesses).some((value) => !value)) return;
+    state.turnDraft.decision = {
+      type: "Full Exposure",
+      targetSeat: nation,
+      payload: "",
+      guesses,
+    };
+    state.turnUi.popup = null;
+    renderGame(snapshot);
+  }
+}
+/* legacy form renderer removed */
+function renderGameLegacy(snapshot) {
   const you = snapshot.game.you;
   if (!state.turnDraft || state.turnDraft.day !== snapshot.game.displayDay) {
     state.turnDraft = createEmptyTurnDraft(snapshot);
@@ -422,70 +1212,48 @@ function collectCharacters() {
 }
 
 function collectSubmission() {
-  const firstNonEmpty = (...values) => values.find((value) => value !== "" && value != null);
-  const decisionType = state.turnDraft?.decision?.type || document.getElementById("decision-type")?.value || "";
-  const decisionTargetValue =
-    decisionType === "Priority Target"
-      ? document.getElementById("decision-target")?.value
-      : decisionType === "Leader's Intervention"
-        ? document.getElementById("decision-target-intervention")?.value
-        : decisionType === "Full Exposure"
-          ? document.getElementById("decision-target-exposure")?.value
-          : "";
-  const decisionPayloadValue =
-    decisionType === "Priority Target"
-      ? document.getElementById("decision-payload")?.value
-      : decisionType === "Leader's Intervention"
-        ? document.getElementById("decision-action")?.value
-        : "";
-  const decision = decisionType
+  const decision = state.turnDraft.decision.type
     ? {
-        type: decisionType,
-        targetSeat: optionalNumber(firstNonEmpty(state.turnDraft?.decision?.targetSeat, decisionTargetValue)),
-        payload: firstNonEmpty(state.turnDraft?.decision?.payload, decisionPayloadValue) || "",
-        guess: ["Parliament", "Base", "Office"].map((tower) => firstNonEmpty(state.turnDraft?.decision?.guesses?.[tower], document.getElementById(`fe-${tower}`)?.value) || ""),
+        type: state.turnDraft.decision.type,
+        targetSeat: optionalNumber(state.turnDraft.decision.targetSeat),
+        payload: state.turnDraft.decision.payload || "",
+        guess: ["Parliament", "Base", "Office"].map((tower) => state.turnDraft.decision.guesses[tower] || ""),
       }
     : null;
 
-  const treatyTarget = optionalNumber(firstNonEmpty(state.turnDraft?.treaty?.targetSeat, document.getElementById("treaty-target")?.value));
-  const treaty = treatyTarget === null ? null : {
-    targetSeat: treatyTarget,
-    duration: Number(firstNonEmpty(state.turnDraft?.treaty?.duration, document.getElementById("treaty-duration").value)),
-  };
-
-  const treatyResponses = Array.from(document.querySelectorAll(".treaty-response-select"))
-    .map((select) => ({
-      offerId: Number(select.dataset.offerId),
-      response: state.turnDraft?.treatyResponses?.[select.dataset.offerId] ?? select.value,
-    }))
-    .filter((entry) => entry.response);
-
-  const actions = [];
-  for (let index = 0; index < getAvailableActionLimit(state.snapshot); index += 1) {
-    const actionDraft = state.turnDraft?.actions?.[index] || null;
-    const type = actionDraft?.type || document.getElementById(`action-type-${index}`)?.value || "";
-    if (!type) continue;
-    if (type === "Distributed Assault") {
-      const targets = [];
-      for (let dist = 0; dist < 3; dist += 1) {
-        const distDraft = actionDraft?.targets?.[dist] || null;
-        const targetSeat = optionalNumber(firstNonEmpty(distDraft?.targetSeat, document.getElementById(`dist-target-${index}-${dist}`)?.value));
-        const targetTower = firstNonEmpty(distDraft?.targetTower, document.getElementById(`dist-tower-${index}-${dist}`)?.value) || "";
-        const guess = firstNonEmpty(distDraft?.guess, document.getElementById(`dist-guess-${index}-${dist}`)?.value) || "";
-        if (targetSeat !== null && targetTower) {
-          targets.push({ targetSeat, targetTower, guess });
-        }
+  const treaty = state.turnDraft.treaty.targetSeat
+    ? {
+        targetSeat: optionalNumber(state.turnDraft.treaty.targetSeat),
+        duration: Number(state.turnDraft.treaty.duration || "2"),
       }
-      actions.push({ type, targets });
-      continue;
-    }
-    actions.push({
-      type,
-      targetSeat: optionalNumber(firstNonEmpty(actionDraft?.targetSeat, document.getElementById(`action-target-${index}`)?.value)),
-      targetTower: firstNonEmpty(actionDraft?.targetTower, document.getElementById(`action-tower-${index}`)?.value) || "",
-      guess: firstNonEmpty(actionDraft?.guess, document.getElementById(`action-guess-${index}`)?.value) || "",
-    });
-  }
+    : null;
+
+  const treatyResponses = Object.entries(state.turnDraft.treatyResponses || {})
+    .filter(([, response]) => response)
+    .map(([offerId, response]) => ({
+      offerId: Number(offerId),
+      response,
+    }));
+
+  const actions = state.turnDraft.actions
+    .filter((action) => action.type)
+    .map((action) => action.type === "Distributed Assault"
+      ? {
+          type: action.type,
+          targets: action.targets
+            .filter((target) => target.targetSeat !== "" && target.targetTower)
+            .map((target) => ({
+              targetSeat: optionalNumber(target.targetSeat),
+              targetTower: target.targetTower,
+              guess: target.guess || "",
+            })),
+        }
+      : {
+          type: action.type,
+          targetSeat: optionalNumber(action.targetSeat),
+          targetTower: action.targetTower || "",
+          guess: action.guess || "",
+        });
 
   return { decision, treaty, treatyResponses, actions };
 }
