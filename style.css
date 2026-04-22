@@ -381,6 +381,325 @@ details summary {
   font-weight: 700;
 }
 
+.arena-shell {
+  display: block;
+}
+
+.arena-board {
+  position: relative;
+  border-radius: 28px;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 14%, rgba(216, 181, 106, 0.12), transparent 22%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.arena-hud {
+  display: grid;
+  grid-template-columns: 160px 1fr 160px;
+  align-items: start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.arena-stat,
+.arena-title {
+  border-radius: 20px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.arena-stat span,
+.arena-title span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+
+.arena-stat strong,
+.arena-title strong {
+  font-size: 1.45rem;
+}
+
+.arena-title {
+  text-align: center;
+}
+
+.arena-field {
+  position: relative;
+  min-height: 640px;
+  border-radius: 30px;
+  margin-bottom: 22px;
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.05), transparent 50%),
+    linear-gradient(180deg, rgba(7, 12, 19, 0.72), rgba(10, 17, 26, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+}
+
+.arena-field::after {
+  content: "";
+  position: absolute;
+  inset: 16px;
+  border-radius: 24px;
+  border: 1px dashed rgba(255, 255, 255, 0.05);
+  pointer-events: none;
+}
+
+.arena-nation {
+  position: absolute;
+  width: 220px;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+
+.arena-nation-name {
+  margin-bottom: 10px;
+  text-align: center;
+  color: var(--text);
+  font-family: "Cinzel", serif;
+  letter-spacing: 0.05em;
+}
+
+.arena-cluster {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  justify-items: center;
+}
+
+.arena-cluster .arena-tower:first-child {
+  grid-column: 1 / span 2;
+}
+
+.arena-tower {
+  width: 96px;
+  min-height: 96px;
+  border-radius: 26px 26px 20px 20px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  padding: 10px 8px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.arena-tower.is-selectable {
+  cursor: pointer;
+  box-shadow: 0 0 0 4px rgba(216, 181, 106, 0.12);
+}
+
+.arena-tower.is-selectable:hover {
+  transform: translateY(-2px) scale(1.02);
+  border-color: var(--gold);
+}
+
+.arena-tower.is-destroyed {
+  opacity: 0.55;
+  filter: saturate(0.6);
+}
+
+.arena-tower-name {
+  font-family: "Cinzel", serif;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+.arena-tower-meta {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+}
+
+.nation-azure .arena-tower {
+  border-color: rgba(79, 164, 255, 0.65);
+}
+
+.nation-verdant .arena-tower {
+  border-color: rgba(129, 208, 110, 0.65);
+}
+
+.nation-amber .arena-tower {
+  border-color: rgba(236, 208, 75, 0.65);
+}
+
+.nation-crimson .arena-tower {
+  border-color: rgba(241, 96, 96, 0.65);
+}
+
+.arena-lower {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 18px;
+}
+
+.arena-side,
+.arena-command {
+  display: grid;
+  gap: 14px;
+}
+
+.arena-sidecard,
+.move-tray,
+.arena-dock {
+  border-radius: 22px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidecard-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 12px;
+}
+
+.treaty-list,
+.orders-queue {
+  display: grid;
+  gap: 10px;
+}
+
+.treaty-entry,
+.order-pill {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.order-pill {
+  align-items: start;
+}
+
+.order-pill div,
+.treaty-entry span {
+  display: grid;
+  gap: 4px;
+}
+
+.order-pill strong {
+  font-size: 0.92rem;
+}
+
+.order-pill span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.order-pill-decision {
+  border: 1px solid rgba(216, 181, 106, 0.28);
+}
+
+.order-remove {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.diplomacy-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.diplomacy-row select,
+.treaty-entry select,
+.arena-popup select {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--text);
+  background: rgba(8, 13, 20, 0.7);
+}
+
+.arena-dock {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dock-button,
+.move-chip {
+  border: 0;
+  border-radius: 18px;
+  padding: 14px 12px;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.dock-button strong,
+.move-chip strong {
+  color: var(--gold);
+  font-size: 0.84rem;
+}
+
+.dock-button.is-active {
+  outline: 2px solid rgba(216, 181, 106, 0.38);
+  background: rgba(216, 181, 106, 0.12);
+}
+
+.move-tray {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.command-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.arena-popup-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 10, 16, 0.74);
+  border-radius: 28px;
+}
+
+.arena-popup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  width: min(420px, calc(100% - 28px));
+  transform: translate(-50%, -50%);
+  border-radius: 22px;
+  padding: 18px;
+  background: rgba(12, 18, 28, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 12px;
+}
+
+.popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 @media (max-width: 920px) {
   .hero {
     grid-template-columns: 1fr;
@@ -388,11 +707,31 @@ details summary {
 
   .action-grid,
   .tower-grid,
-  .inline-grid {
+  .inline-grid,
+  .arena-dock,
+  .arena-lower,
+  .arena-hud {
     grid-template-columns: 1fr;
   }
 
   .page-shell {
     width: min(100vw - 18px, 1400px);
+  }
+
+  .arena-field {
+    min-height: 820px;
+  }
+
+  .arena-nation {
+    width: 180px;
+  }
+
+  .arena-tower {
+    width: 78px;
+    min-height: 82px;
+  }
+
+  .command-actions {
+    flex-direction: column;
   }
 }
