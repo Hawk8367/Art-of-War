@@ -19,6 +19,12 @@ const ALT_ASSIGNMENTS = {
   Office: "Fen",
 };
 
+const THIRD_ASSIGNMENTS = {
+  Parliament: "Galen",
+  Base: "Helia",
+  Office: "Ivor",
+};
+
 function setupTwoPlayerGame() {
   const lobby = createLobby("TEST01", "Host", 2);
   joinLobby(lobby, "Guest");
@@ -27,9 +33,20 @@ function setupTwoPlayerGame() {
   return lobby.game;
 }
 
-function resolveSubmittedDay(game, firstSubmission, secondSubmission) {
-  submitTurn(game, 0, firstSubmission);
-  submitTurn(game, 1, secondSubmission);
+function setupThreePlayerGame() {
+  const lobby = createLobby("TEST01", "Host", 3);
+  joinLobby(lobby, "Guest");
+  joinLobby(lobby, "Third");
+  setCharacters(lobby.game, 0, DEFAULT_ASSIGNMENTS);
+  setCharacters(lobby.game, 1, ALT_ASSIGNMENTS);
+  setCharacters(lobby.game, 2, THIRD_ASSIGNMENTS);
+  return lobby.game;
+}
+
+function resolveSubmittedDay(game, ...submissions) {
+  submissions.forEach((submission, seat) => {
+    submitTurn(game, seat, submission);
+  });
   expect(everyoneSubmitted(game)).toBe(true);
   resolveDay(game);
 }
@@ -127,7 +144,7 @@ describe("game-core rules", () => {
   });
 
   it("creates a treaty after mutual acceptance and blocks attacks while active", () => {
-    const game = setupTwoPlayerGame();
+    const game = setupThreePlayerGame();
 
     resolveSubmittedDay(
       game,
@@ -138,7 +155,10 @@ describe("game-core rules", () => {
       {
         treaty: { targetSeat: 0, duration: 3 },
         actions: [],
-      }
+      },
+      {
+        actions: [],
+      },
     );
 
     resolveSubmittedDay(
@@ -150,11 +170,14 @@ describe("game-core rules", () => {
       {
         treatyResponses: [{ offerId: 1, response: "accept" }],
         actions: [],
-      }
+      },
+      {
+        actions: [],
+      },
     );
 
     expect(game.players[1].towers.Parliament.hp).toBe(200);
-    expect(game.treaties.some((treaty) => treaty.active && treaty.remaining === 2)).toBe(true);
+    expect(game.treaties.some((treaty) => treaty.active && treaty.remaining === 2 && treaty.a === 0 && treaty.b === 1)).toBe(true);
     expect(
       game.players[0].resolutionHistory[2].some((entry) =>
         entry.includes("Strike: Failure")
