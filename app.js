@@ -97,6 +97,7 @@ const el = {
   joinLobbyButton: document.getElementById("join-lobby-button"),
   inviteLink: document.getElementById("invite-link"),
   copyLinkButton: document.getElementById("copy-link-button"),
+  leaveLobbyButton: document.getElementById("leave-lobby-button"),
   lobbyRoster: document.getElementById("lobby-roster"),
   setupPanel: document.getElementById("setup-panel"),
   setupGrid: document.getElementById("setup-grid"),
@@ -105,6 +106,7 @@ const el = {
   statusBanner: document.getElementById("status-banner"),
   scoreboard: document.getElementById("scoreboard"),
   playerForm: document.getElementById("player-form"),
+  forfeitButton: document.getElementById("forfeit-button"),
   submitTurnButton: document.getElementById("submit-turn-button"),
   logTabs: document.getElementById("log-tabs"),
   globalLog: document.getElementById("global-log"),
@@ -660,8 +662,8 @@ function renderGame(snapshot) {
     <section class="arena-board ${turnLocked ? "submitted-card" : ""}">
       <div class="arena-hud">
         <div class="arena-stat left">
-          <span>Points</span>
-          <strong>${you.score}</strong>
+          <span>Points | Gold</span>
+          <strong>${you.score} | ${you.gold}g</strong>
         </div>
         <div class="arena-title">
           <strong>${you.nationName}</strong>
@@ -1187,6 +1189,8 @@ function render() {
   el.heroStatus.textContent = snapshot ? (snapshot.game.finished ? "Match Complete" : snapshot.game.started ? "In Match" : "Lobby Open") : "Not Connected";
   el.heroLobby.textContent = state.lobbyId || "None";
   el.inviteLink.textContent = state.inviteLink || "";
+  el.leaveLobbyButton.classList.toggle("hidden", !snapshot || snapshot.game.started);
+  el.forfeitButton.classList.toggle("hidden", !snapshot || !snapshot.game.started || snapshot.game.finished);
 
   const connected = Boolean(snapshot);
   el.landingPanel.classList.toggle("hidden", connected);
@@ -1218,6 +1222,7 @@ function collectSubmission() {
         targetSeat: optionalNumber(state.turnDraft.decision.targetSeat),
         payload: state.turnDraft.decision.payload || "",
         guess: ["Parliament", "Base", "Office"].map((tower) => state.turnDraft.decision.guesses[tower] || ""),
+        guesses: { ...state.turnDraft.decision.guesses },
       }
     : null;
 
@@ -1301,6 +1306,24 @@ async function joinLobby() {
   await refreshState();
 }
 
+function clearSession() {
+  state.lobbyId = "";
+  state.token = "";
+  state.inviteLink = "";
+  state.snapshot = null;
+  state.pendingSnapshot = null;
+  state.selectedLogDay = null;
+  state.turnDraft = null;
+  resetTurnUi();
+  if (state.pollHandle) {
+    clearInterval(state.pollHandle);
+    state.pollHandle = null;
+  }
+  localStorage.removeItem("art-of-war-session");
+  history.replaceState({}, "", "/");
+  render();
+}
+
 async function readyUp() {
   await api("/api/setup", {
     method: "POST",
@@ -1331,6 +1354,29 @@ async function submitTurn() {
   state.turnUi.popup = null;
   applySnapshot(snapshot);
   window.alert("Turn submitted successfully.");
+}
+
+async function leaveLobby() {
+  await api("/api/leave", {
+    method: "POST",
+    body: {
+      lobbyId: state.lobbyId,
+      token: state.token,
+    },
+  });
+  clearSession();
+}
+
+async function forfeitMatch() {
+  const snapshot = await api("/api/forfeit", {
+    method: "POST",
+    body: {
+      lobbyId: state.lobbyId,
+      token: state.token,
+    },
+  });
+  applySnapshot(snapshot);
+  window.alert("You forfeited the match.");
 }
 
 function createEmptyTurnDraft(snapshot) {
@@ -1713,6 +1759,8 @@ el.submitTurnButton.addEventListener("click", () => submitTurn().catch((error) =
 el.copyLinkButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(state.inviteLink);
 });
+el.leaveLobbyButton.addEventListener("click", () => leaveLobby().catch((error) => window.alert(error.message)));
+el.forfeitButton.addEventListener("click", () => forfeitMatch().catch((error) => window.alert(error.message)));
 el.moveGuideButton.addEventListener("click", openMoveGuide);
 el.moveGuideClose.addEventListener("click", closeMoveGuide);
 el.moveGuideDismiss.addEventListener("click", closeMoveGuide);

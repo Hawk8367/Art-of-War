@@ -119,7 +119,11 @@ function joinLobby(lobby, displayName) {
   if (lobby.players.length >= lobby.game.playerCount) {
     throw new Error("Lobby is full.");
   }
-  const seat = lobby.players.length;
+  const occupiedSeats = new Set(lobby.players.map((player) => player.seat));
+  const seat = lobby.game.players.find((player) => !occupiedSeats.has(player.seat))?.seat;
+  if (seat == null) {
+    throw new Error("No lobby seats are available.");
+  }
   const player = {
     seat,
     displayName,
@@ -128,6 +132,42 @@ function joinLobby(lobby, displayName) {
   };
   lobby.players.push(player);
   return player;
+}
+
+function resetNationForLobbySeat(game, seat) {
+  const nation = getNation(game, seat);
+  if (!nation) return;
+  nation.gold = 200;
+  nation.score = 0;
+  nation.totalMobilization = false;
+  nation.fullExposureUsed = {};
+  nation.intel = [];
+  nation.resolutionHistory = {};
+  nation.ready = false;
+  nation.lastSubmittedDay = 0;
+  nation.pendingTurn = null;
+  TOWERS.forEach((tower) => {
+    nation.towers[tower] = {
+      hp: game.towerMaxHp,
+      character: null,
+    };
+  });
+}
+
+function leaveLobby(lobby, token) {
+  if (lobby.game.started) {
+    throw new Error("The match has already started.");
+  }
+  const player = getPlayerRecord(lobby, token);
+  if (!player) {
+    throw new Error("Invalid player token.");
+  }
+  lobby.players = lobby.players.filter((entry) => entry.token !== token);
+  resetNationForLobbySeat(lobby.game, player.seat);
+  if (lobby.hostSeat === player.seat) {
+    lobby.hostSeat = lobby.players[0]?.seat ?? 0;
+  }
+  return player.seat;
 }
 
 function setCharacters(game, seat, assignments) {
@@ -143,6 +183,29 @@ function setCharacters(game, seat, assignments) {
   if (game.players.every((player) => player.ready)) {
     game.started = true;
   }
+}
+
+function forfeitGame(game, seat) {
+  const forfeitingNation = getNation(game, seat);
+  if (!forfeitingNation) {
+    throw new Error("Player seat is no longer available in this match.");
+  }
+  if (!game.started || game.finished) {
+    throw new Error("Game is not currently active.");
+  }
+
+  TOWERS.forEach((tower) => {
+    forfeitingNation.towers[tower].hp = 0;
+  });
+  forfeitingNation.pendingTurn = null;
+  forfeitingNation.lastSubmittedDay = game.day;
+  game.finished = true;
+
+  game.players.forEach((player) => {
+    if (player.seat !== seat) {
+      player.score += 100;
+    }
+  });
 }
 
 function activeActionLimit(player, decision) {
@@ -188,6 +251,16 @@ function decisionCost(type) {
     "Expanded Command": 70,
   };
   return table[type] || 0;
+}
+
+function normalizeDecisionGuesses(decision) {
+  if (Array.isArray(decision?.guess)) {
+    return decision.guess;
+  }
+  if (decision?.guesses && typeof decision.guesses === "object") {
+    return TOWERS.map((tower) => decision.guesses[tower] || "");
+  }
+  return [];
 }
 
 function buildPlayerSnapshot(game, seat) {
@@ -331,7 +404,7 @@ function validateSubmission(game, nation, treaty, decision, actions) {
   }
   if (decision?.type === "Full Exposure") {
     requireEnemySeat(decision.targetSeat, "Full Exposure");
-    const guesses = Array.isArray(decision.guess) ? decision.guess : [];
+    const guesses = normalizeDecisionGuesses(decision);
     if (guesses.length !== 3 || guesses.some((guess) => !validCharacter(guess))) {
       throw new Error("Full Exposure needs a nation and all three tower guesses.");
     }
@@ -545,7 +618,7 @@ function resolveNationalDecisions(game, submissions, resolution) {
       if (!nation.fullExposureUsed[decision.targetSeat]) {
         nation.fullExposureUsed[decision.targetSeat] = true;
         const target = getNation(game, decision.targetSeat);
-        const guesses = (decision.guess || []).filter(Boolean);
+        const guesses = normalizeDecisionGuesses(decision).filter(Boolean);
         const actual = TOWERS.map((tower) => target.towers[tower].character);
         const success = guesses.length === 3 && guesses.every((guess, index) => guess === actual[index]);
         if (success) {
@@ -906,7 +979,9 @@ module.exports = {
   getPlayerRecord,
   getNation,
   joinLobby,
+  leaveLobby,
   setCharacters,
+  forfeitGame,
   buildPlayerSnapshot,
   submitTurn,
   everyoneSubmitted,

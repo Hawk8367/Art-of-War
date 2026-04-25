@@ -14,11 +14,13 @@ const {
   getPlayerRecord,
   getNation,
   joinLobby,
+  leaveLobby,
   setCharacters,
   buildPlayerSnapshot,
   submitTurn,
   everyoneSubmitted,
   resolveDay,
+  forfeitGame,
 } = require("./game-core");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -156,6 +158,21 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    if (req.method === "POST" && pathname === "/api/leave") {
+      const body = await readBody(req);
+      const lobby = getLobby(body.lobbyId);
+      if (!lobby) {
+        sendJson(res, 404, { error: "Lobby not found." });
+        return;
+      }
+      leaveLobby(lobby, body.token);
+      if (lobby.players.length === 0) {
+        lobbies.delete(lobby.id);
+      }
+      sendJson(res, 200, { ok: true });
+      return;
+    }
+
     if (req.method === "GET" && pathname === "/api/state") {
       const lobby = getLobby(url.searchParams.get("lobby"));
       if (!lobby) {
@@ -200,6 +217,23 @@ const server = http.createServer(async (req, res) => {
       if (everyoneSubmitted(lobby.game)) {
         resolveDay(lobby.game);
       }
+      sendJson(res, 200, buildLobbyState(lobby, body.token));
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/api/forfeit") {
+      const body = await readBody(req);
+      const lobby = getLobby(body.lobbyId);
+      if (!lobby) {
+        sendJson(res, 404, { error: "Lobby not found." });
+        return;
+      }
+      const player = getPlayerRecord(lobby, body.token);
+      if (!player) {
+        sendJson(res, 403, { error: "Invalid player token." });
+        return;
+      }
+      forfeitGame(lobby.game, player.seat);
       sendJson(res, 200, buildLobbyState(lobby, body.token));
       return;
     }

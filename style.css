@@ -129,6 +129,13 @@ h1 {
   margin-bottom: 14px;
 }
 
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .primary-button,
 .secondary-button {
   border: 0;
