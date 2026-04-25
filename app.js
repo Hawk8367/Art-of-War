@@ -107,6 +107,7 @@ const el = {
   scoreboard: document.getElementById("scoreboard"),
   playerForm: document.getElementById("player-form"),
   forfeitButton: document.getElementById("forfeit-button"),
+  leaveMatchButton: document.getElementById("leave-match-button"),
   submitTurnButton: document.getElementById("submit-turn-button"),
   logTabs: document.getElementById("log-tabs"),
   globalLog: document.getElementById("global-log"),
@@ -246,6 +247,10 @@ function fullExposureNationOptions(snapshot) {
   return `<option value="">None</option>${options.join("")}`;
 }
 
+function getCommanderName(snapshot, seat) {
+  return snapshot.roster.find((entry) => entry.seat === seat)?.displayName || snapshot.game.nations.find((entry) => entry.seat === seat)?.nationName || "Unknown Commander";
+}
+
 function towerOptions() {
   return `<option value="">None</option><option value="Parliament">Parliament</option><option value="Base">Base</option><option value="Office">Office</option>`;
 }
@@ -310,7 +315,7 @@ function getMovesForCategory(snapshot, category) {
   if (category === "decision") return snapshot.constants.nationalDecisions;
   if (category === "attack") return snapshot.constants.attackActions;
   if (category === "intel") return snapshot.constants.intelActions;
-  if (category === "jamming") return JAMMING_ACTIONS;
+  if (category === "jamming") return snapshot.game.playerCount === 2 ? JAMMING_ACTIONS.filter((action) => action !== "Interception") : JAMMING_ACTIONS;
   if (category === "defense") return CORE_DEFENSE_ACTIONS;
   return [];
 }
@@ -404,7 +409,10 @@ function isTowerSelectable(snapshot, nation, towerName, towerData) {
   }
   if (pending.kind === "distributed") {
     if (nation.seat === snapshot.game.playerSeat) return false;
-    return !pending.targets.some((target) => target.targetSeat === nation.seat && target.targetTower === towerName);
+    const pendingPopupMatch = state.turnUi.popup?.type === "distributedGuess"
+      && Number(state.turnUi.popup.pendingTargetSeat) === nation.seat
+      && state.turnUi.popup.pendingTargetTower === towerName;
+    return !pending.targets.some((target) => target.targetSeat === nation.seat && target.targetTower === towerName) && !pendingPopupMatch;
   }
   return false;
 }
@@ -568,6 +576,9 @@ function renderMoveTray(snapshot, turnLocked) {
 }
 
 function renderTreatiesPanel(snapshot, turnLocked) {
+  if (snapshot.game.playerCount === 2) {
+    return "";
+  }
   const you = snapshot.game.you;
   return `
     <div class="arena-sidecard">
@@ -707,7 +718,13 @@ function renderGame(snapshot) {
   }
   const turnLocked = you.lastSubmittedDay === snapshot.game.displayDay;
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
-  el.statusBanner.innerHTML = `<span class="meta-text">${getPendingInstruction(snapshot)}</span>`;
+  const winnerName = snapshot.game.finished && snapshot.game.winnerSeat !== null ? getCommanderName(snapshot, snapshot.game.winnerSeat) : "";
+  const winReason = snapshot.game.winReason === "forfeit"
+    ? "won by forfeit."
+    : snapshot.game.winReason === "conquest"
+      ? "won by destroying all enemy towers."
+      : "won on points.";
+  el.statusBanner.innerHTML = `<span class="meta-text">${snapshot.game.finished ? `${winnerName} ${winReason}` : getPendingInstruction(snapshot)}</span>`;
   el.scoreboard.innerHTML = "";
   el.scoreboard.classList.add("hidden");
   el.submitTurnButton.classList.add("hidden");
@@ -751,12 +768,13 @@ function renderGame(snapshot) {
           ${renderMoveTray(snapshot, turnLocked)}
           <div class="command-actions">
             <button type="button" class="secondary-button" data-cancel-selection="1" ${state.turnUi.pending || state.turnUi.popup ? "" : "disabled"}>Cancel Selection</button>
-            <button type="button" class="primary-button" data-submit-turn="1" ${turnLocked ? "disabled" : ""}>${turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
+            ${snapshot.game.finished ? '<button type="button" class="secondary-button" data-leave-match="1">Leave Match</button>' : ""}
+            <button type="button" class="primary-button" data-submit-turn="1" ${turnLocked || snapshot.game.finished ? "disabled" : ""}>${snapshot.game.finished ? "Match Complete" : turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
           </div>
         </div>
       </div>
 
-      <div class="arena-treaties-row">
+      <div class="arena-treaties-row ${snapshot.game.playerCount === 2 ? "hidden" : ""}">
         ${renderTreatiesPanel(snapshot, turnLocked)}
       </div>
 
@@ -828,6 +846,9 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-submit-turn]").forEach((button) => {
     button.addEventListener("click", () => submitTurn().catch((error) => window.alert(error.message)));
+  });
+  el.playerForm.querySelectorAll("[data-leave-match]").forEach((button) => {
+    button.addEventListener("click", clearSession);
   });
   el.playerForm.querySelectorAll("[data-cancel-selection]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1250,6 +1271,7 @@ function render() {
   el.inviteLink.textContent = state.inviteLink || "";
   el.leaveLobbyButton.classList.toggle("hidden", !snapshot || snapshot.game.started);
   el.forfeitButton.classList.toggle("hidden", !snapshot || !snapshot.game.started || snapshot.game.finished);
+  el.leaveMatchButton.classList.toggle("hidden", !snapshot || !snapshot.game.finished);
 
   const connected = Boolean(snapshot);
   el.landingPanel.classList.toggle("hidden", connected);
@@ -1820,6 +1842,7 @@ el.copyLinkButton.addEventListener("click", async () => {
 });
 el.leaveLobbyButton.addEventListener("click", () => leaveLobby().catch((error) => window.alert(error.message)));
 el.forfeitButton.addEventListener("click", () => forfeitMatch().catch((error) => window.alert(error.message)));
+el.leaveMatchButton.addEventListener("click", clearSession);
 el.moveGuideButton.addEventListener("click", openMoveGuide);
 el.moveGuideClose.addEventListener("click", closeMoveGuide);
 el.moveGuideDismiss.addEventListener("click", closeMoveGuide);

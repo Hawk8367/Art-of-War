@@ -65,6 +65,8 @@ function createGame(playerCount) {
     towerMaxHp,
     started: false,
     finished: false,
+    winnerSeat: null,
+    winReason: "",
     globalFirstTowerDestroyed: false,
     treaties: [],
     pendingTreatyOffers: [],
@@ -243,8 +245,10 @@ function forfeitGame(game, seat) {
   game.players.forEach((player) => {
     if (player.seat !== seat) {
       player.score += 100;
+      game.winnerSeat = player.seat;
     }
   });
+  game.winReason = "forfeit";
 }
 
 function activeActionLimit(player, decision) {
@@ -313,6 +317,8 @@ function buildPlayerSnapshot(game, seat) {
     displayDay: Math.min(game.day, game.maxDays),
     started: game.started,
     finished: game.finished,
+    winnerSeat: game.winnerSeat,
+    winReason: game.winReason,
     towerMaxHp: game.towerMaxHp,
     playerCount: game.playerCount,
     you: {
@@ -510,6 +516,9 @@ function validateSubmission(game, nation, treaty, decision, actions) {
   }
 
   if (treaty) {
+    if (game.playerCount === 2) {
+      throw new Error("Treaties are disabled in 2-player matches.");
+    }
     requireEnemySeat(treaty.targetSeat, "Treaty proposal");
     if (![1, 2, 3].includes(Number(treaty.duration))) {
       throw new Error("Treaty proposal needs a valid duration.");
@@ -550,6 +559,10 @@ function validateSubmission(game, nation, treaty, decision, actions) {
   for (const action of actions) {
     if (!validAction(action?.type)) {
       throw new Error("One of the selected moves is invalid.");
+    }
+
+    if (game.playerCount === 2 && action.type === "Interception") {
+      throw new Error("Interception is disabled in 2-player matches.");
     }
 
     if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "Identity Check", "Move Check", "Interception"].includes(action.type)) {
@@ -661,7 +674,10 @@ function resolveDay(game) {
     player.pendingTurn = null;
   });
 
-  if (game.day >= game.maxDays) {
+  const alivePlayers = game.players.filter((player) => totalHealth(player) > 0);
+  if (alivePlayers.length === 1) {
+    finishGame(game, alivePlayers[0].seat, "conquest");
+  } else if (game.day >= game.maxDays) {
     finishGame(game);
   } else {
     game.day += 1;
@@ -669,6 +685,11 @@ function resolveDay(game) {
 }
 
 function resolveTreaties(game, submissions) {
+  if (game.playerCount === 2) {
+    game.pendingTreatyOffers = [];
+    game.treaties = [];
+    return;
+  }
   submissions.forEach((entry) => {
     (entry.treatyResponses || []).forEach((response) => {
       const offer = game.pendingTreatyOffers.find((candidate) => candidate.id === response.offerId);
@@ -1087,10 +1108,29 @@ function finalizeLogs(game, resolution, resolvingDay) {
   });
 }
 
-function finishGame(game) {
+function finishGame(game, forcedWinnerSeat = null, reason = "points") {
   game.finished = true;
-  const healthiest = [...game.players].sort((a, b) => totalHealth(b) - totalHealth(a))[0];
-  healthiest.score += 100;
+  let winner = forcedWinnerSeat !== null ? getNation(game, forcedWinnerSeat) : null;
+  if (reason === "points") {
+    const healthiest = [...game.players].sort((a, b) => totalHealth(b) - totalHealth(a))[0];
+    if (healthiest) {
+      healthiest.score += 100;
+    }
+  }
+  if (!winner) {
+    winner = [...game.players].sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (scoreDiff !== 0) return scoreDiff;
+      return totalHealth(b) - totalHealth(a);
+    })[0];
+  }
+  if (winner) {
+    if (reason === "points") {
+      winner.score += 100;
+    }
+    game.winnerSeat = winner.seat;
+    game.winReason = reason;
+  }
 }
 
 module.exports = {
