@@ -298,7 +298,7 @@ function clearDecisionDraft() {
 }
 
 function getMoveCategory(type) {
-  if (type === "decision") return "decision";
+  if (state.snapshot.constants.nationalDecisions.includes(type)) return "decision";
   if (JAMMING_ACTIONS.includes(type)) return "jamming";
   if (CORE_DEFENSE_ACTIONS.includes(type)) return "defense";
   if (state.snapshot.constants.attackActions.includes(type)) return "attack";
@@ -348,8 +348,30 @@ function getTowerBadgeText(snapshot, nation, towerName, data) {
 }
 
 function getPendingInstruction(snapshot) {
+  if (state.turnUi.popup?.type === "intervention") {
+    return "Leader's Intervention selected. Choose one nation and the move you want to block.";
+  }
+  if (state.turnUi.popup?.type === "fullExposure") {
+    return "Full Exposure selected. Choose one nation, then guess Parliament, Base, and Office.";
+  }
+  if (state.turnUi.popup?.type === "guessAfterTowerAction") {
+    return `Choose the character guess for ${state.turnUi.popup.targetTower}.`;
+  }
+  if (state.turnUi.popup?.type === "identityCheck") {
+    return "Identity Check selected. Choose one nation and one character.";
+  }
+  if (state.turnUi.popup?.type === "nationOnlyAction") {
+    return `${state.turnUi.popup.moveType} selected. Choose one target nation.`;
+  }
   const pending = state.turnUi.pending;
-  if (!pending) return `Choose a category below. ${getRemainingActionCount(snapshot)} action(s) remaining.`;
+  if (!pending) {
+    if (state.turnUi.selectedCategory === "decision") {
+      return state.turnDraft.decision.type
+        ? `National Decision locked: ${state.turnDraft.decision.type}. You may choose only one national decision this round.`
+        : "Choose one national decision, or switch categories to queue your normal actions.";
+    }
+    return `Choose a move, then complete any required targeting. ${getRemainingActionCount(snapshot)} action(s) remaining.`;
+  }
   if (pending.kind === "towerAction") {
     return pending.scope === "self"
       ? `Select one of your towers for ${pending.moveType}.`
@@ -391,15 +413,6 @@ function renderOrdersQueue(snapshot, turnLocked) {
   const actionEntries = state.turnDraft.actions
     .map((action, index) => ({ action, index }))
     .filter(({ action }) => action.type);
-  const decision = state.turnDraft.decision.type
-    ? `<div class="order-pill order-pill-decision">
-        <div>
-          <strong>National Decision</strong>
-          <span>${state.turnDraft.decision.type}</span>
-        </div>
-        ${turnLocked ? "" : '<button type="button" class="order-remove" data-clear-decision="1">Clear</button>'}
-      </div>`
-    : "";
   const actions = actionEntries.map(({ action, index }) => `
     <div class="order-pill">
       <div>
@@ -409,9 +422,50 @@ function renderOrdersQueue(snapshot, turnLocked) {
       ${turnLocked ? "" : `<button type="button" class="order-remove" data-remove-action="${index}">Clear</button>`}
     </div>
   `).join("");
-  return decision || actions
-    ? `<div class="orders-queue">${decision}${actions}</div>`
+  return actions
+    ? `<div class="orders-queue">${actions}</div>`
     : `<div class="meta-text">No orders queued yet.</div>`;
+}
+
+function describeDecision(snapshot) {
+  const decision = state.turnDraft.decision;
+  if (!decision.type) return "No national decision selected.";
+  if (decision.type === "Priority Target" && decision.targetSeat !== "" && decision.payload) {
+    const nation = snapshot.game.nations.find((entry) => entry.seat === Number(decision.targetSeat));
+    return `${nation?.nationName || "Unknown"} ${decision.payload}`;
+  }
+  if (decision.type === "Leader's Intervention" && decision.targetSeat !== "" && decision.payload) {
+    const nation = snapshot.game.nations.find((entry) => entry.seat === Number(decision.targetSeat));
+    return `${nation?.nationName || "Unknown"} - block ${decision.payload}`;
+  }
+  if (decision.type === "Full Exposure" && decision.targetSeat !== "") {
+    const nation = snapshot.game.nations.find((entry) => entry.seat === Number(decision.targetSeat));
+    return `${nation?.nationName || "Unknown"} locked in with 3 tower guesses`;
+  }
+  return "Ready";
+}
+
+function renderDecisionPanel(snapshot, turnLocked) {
+  const hasDecision = Boolean(state.turnDraft.decision.type);
+  return `
+    <div class="arena-sidecard ${hasDecision ? "decision-card-active" : ""}">
+      <div class="sidecard-header">
+        <h3>National Decision</h3>
+        <span class="meta-text">${hasDecision ? "Locked this round" : "1 available"}</span>
+      </div>
+      ${hasDecision
+        ? `
+          <div class="order-pill order-pill-decision">
+            <div>
+              <strong>${state.turnDraft.decision.type}</strong>
+              <span>${describeDecision(snapshot)}</span>
+            </div>
+            ${turnLocked ? "" : '<button type="button" class="order-remove" data-clear-decision="1">Clear</button>'}
+          </div>
+        `
+        : '<div class="meta-text">Choose one national decision from the move tray. It does not use one of your normal actions.</div>'}
+    </div>
+  `;
 }
 
 function describeQueuedAction(snapshot, action) {
@@ -501,8 +555,9 @@ function renderMoveTray(snapshot, turnLocked) {
           || (category !== "decision" && getRemainingActionCount(snapshot) === 0)
           || (category === "decision" && Boolean(state.turnDraft.decision.type))
           || (category !== "decision" && isMoveAlreadyUsed(snapshot, move));
+        const selected = category === "decision" && state.turnDraft.decision.type === move;
         return `
-          <button type="button" class="move-chip" data-move="${move}" ${disabled ? "disabled" : ""}>
+          <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" ${disabled ? "disabled" : ""}>
             <span>${move}</span>
             <strong>${MOVE_COSTS[move] === 0 ? "Free" : `${MOVE_COSTS[move]}g`}</strong>
           </button>
@@ -512,12 +567,12 @@ function renderMoveTray(snapshot, turnLocked) {
   `;
 }
 
-function renderDiplomacyPanel(snapshot, turnLocked) {
+function renderTreatiesPanel(snapshot, turnLocked) {
   const you = snapshot.game.you;
   return `
     <div class="arena-sidecard">
       <div class="sidecard-header">
-        <h3>Diplomacy</h3>
+        <h3>Treaties</h3>
         <span class="meta-text">Treaties and responses</span>
       </div>
       ${you.activeTreaties.length
@@ -681,7 +736,7 @@ function renderGame(snapshot) {
 
       <div class="arena-lower">
         <div class="arena-side">
-          ${renderDiplomacyPanel(snapshot, turnLocked)}
+          ${renderDecisionPanel(snapshot, turnLocked)}
           <div class="arena-sidecard">
             <div class="sidecard-header">
               <h3>Queued Orders</h3>
@@ -699,6 +754,10 @@ function renderGame(snapshot) {
             <button type="button" class="primary-button" data-submit-turn="1" ${turnLocked ? "disabled" : ""}>${turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
           </div>
         </div>
+      </div>
+
+      <div class="arena-treaties-row">
+        ${renderTreatiesPanel(snapshot, turnLocked)}
       </div>
 
       ${renderPopup(snapshot)}

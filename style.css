@@ -292,6 +292,9 @@ input:disabled {
   border-radius: 18px;
   background: var(--gold-soft);
   color: var(--text);
+  border: 1px solid rgba(216, 181, 106, 0.28);
+  box-shadow: 0 0 0 1px rgba(216, 181, 106, 0.1) inset;
+  font-weight: 600;
 }
 
 .log {
@@ -499,12 +502,19 @@ details summary {
 
 .arena-tower.is-selectable {
   cursor: pointer;
-  box-shadow: 0 0 0 4px rgba(216, 181, 106, 0.12);
+  border-color: rgba(255, 225, 138, 0.95);
+  box-shadow:
+    0 0 0 5px rgba(216, 181, 106, 0.2),
+    0 0 22px rgba(216, 181, 106, 0.45);
+  background: rgba(216, 181, 106, 0.12);
 }
 
 .arena-tower.is-selectable:hover {
-  transform: translateY(-2px) scale(1.02);
+  transform: translateY(-3px) scale(1.05);
   border-color: var(--gold);
+  box-shadow:
+    0 0 0 6px rgba(216, 181, 106, 0.26),
+    0 0 30px rgba(216, 181, 106, 0.58);
 }
 
 .arena-tower.is-destroyed {
@@ -544,6 +554,7 @@ details summary {
   display: grid;
   grid-template-columns: 340px minmax(0, 1fr);
   gap: 18px;
+  margin-bottom: 18px;
 }
 
 .arena-side,
@@ -559,6 +570,10 @@ details summary {
   padding: 14px;
   background: rgba(255, 255, 255, 0.045);
   border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.arena-treaties-row {
+  display: block;
 }
 
 .sidecard-header {
@@ -609,6 +624,11 @@ details summary {
   border: 1px solid rgba(216, 181, 106, 0.28);
 }
 
+.decision-card-active {
+  border-color: rgba(216, 181, 106, 0.3);
+  background: rgba(216, 181, 106, 0.09);
+}
+
 .order-remove {
   border: 0;
   border-radius: 999px;
@@ -653,6 +673,7 @@ details summary {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
   cursor: pointer;
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease, outline-color 150ms ease;
 }
 
 .dock-button strong,
@@ -664,6 +685,12 @@ details summary {
 .dock-button.is-active {
   outline: 2px solid rgba(216, 181, 106, 0.38);
   background: rgba(216, 181, 106, 0.12);
+}
+
+.move-chip.is-selected {
+  outline: 2px solid rgba(216, 181, 106, 0.5);
+  background: rgba(216, 181, 106, 0.16);
+  box-shadow: 0 0 20px rgba(216, 181, 106, 0.16);
 }
 
 .move-tray {
