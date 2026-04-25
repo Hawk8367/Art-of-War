@@ -352,6 +352,10 @@ function getTowerBadgeText(snapshot, nation, towerName, data) {
   return data.hp > 0 ? "Alive" : "Destroyed";
 }
 
+function hasIncomingSiege(snapshot, seat, towerName) {
+  return snapshot.game.you.incomingSieges?.some((siege) => siege.targetTower === towerName && seat === snapshot.game.playerSeat);
+}
+
 function getPendingInstruction(snapshot) {
   if (state.turnUi.popup?.type === "intervention") {
     return "Leader's Intervention selected. Choose one nation and the move you want to block.";
@@ -515,6 +519,12 @@ function renderArena(snapshot) {
                 data-tower-name="${towerName}"
                 ${selectable ? "" : "disabled"}
               >
+                ${hasIncomingSiege(snapshot, nation.seat, towerName) ? `
+                  <span class="arena-tower-threat" title="Incoming siege">
+                    <span class="arena-tower-threat-icon"></span>
+                    <span>Siege</span>
+                  </span>
+                ` : ""}
                 <span class="arena-tower-name">${towerName}</span>
                 <span class="arena-tower-meta">${getTowerBadgeText(snapshot, nation, towerName, tower)}</span>
               </button>

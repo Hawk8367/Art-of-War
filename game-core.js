@@ -358,6 +358,12 @@ function buildPlayerSnapshot(game, seat) {
           };
         })
         .filter(Boolean),
+      incomingSieges: game.pendingSieges
+        .filter((siege) => siege.targetSeat === seat && siege.dayToResolve === game.day)
+        .map((siege) => ({
+          fromSeat: siege.seat,
+          targetTower: siege.targetTower,
+        })),
       logDays: Object.keys(nation.resolutionHistory).map(Number).sort((a, b) => a - b),
       resolutionHistory: nation.resolutionHistory,
     },
@@ -770,7 +776,7 @@ function resolveNationalDecisions(game, submissions, resolution) {
         const success = guesses.length === 3 && guesses.every((guess, index) => guess === actual[index]);
         if (success) {
           nation.gold += 200;
-          addPlayerResult(resolution, entry.seat, "decision", `Successful: ${target.nationName} fully exposed`, "Full Exposure");
+          addPlayerResult(resolution, entry.seat, "decision", `Successful: +200 gold. ${target.nationName} fully exposed`, "Full Exposure");
         } else {
           addPlayerResult(resolution, entry.seat, "decision", `Failure: ${target.nationName} not fully exposed`, "Full Exposure");
         }
