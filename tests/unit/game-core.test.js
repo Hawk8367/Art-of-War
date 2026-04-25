@@ -176,7 +176,7 @@ describe("game-core rules", () => {
       },
     );
 
-    expect(game.players[1].towers.Parliament.hp).toBe(200);
+    expect(game.players[1].towers.Parliament.hp).toBe(300);
     expect(game.treaties.some((treaty) => treaty.active && treaty.remaining === 2 && treaty.a === 0 && treaty.b === 1)).toBe(true);
     expect(
       game.players[0].resolutionHistory[2].some((entry) =>
