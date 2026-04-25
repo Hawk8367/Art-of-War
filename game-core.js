@@ -27,6 +27,7 @@ const NATIONAL_DECISIONS = [
   "Total Mobilization",
   "Expanded Command",
 ];
+const BOT_NAMES = ["Iron Regent", "Silent Marshal", "Grey Banner", "Ashen Council"];
 
 function shuffle(array) {
   const copy = [...array];
@@ -35,6 +36,23 @@ function shuffle(array) {
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
+}
+
+function sample(array) {
+  if (!array.length) return null;
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function randomDistinctCharacters() {
+  return shuffle(CHARACTER_POOL).slice(0, 3);
+}
+
+function assignCharacters(game, seat, assignments) {
+  const nation = getNation(game, seat);
+  TOWERS.forEach((tower) => {
+    nation.towers[tower].character = assignments[tower];
+  });
+  nation.ready = true;
 }
 
 function createGame(playerCount) {
@@ -84,12 +102,23 @@ function publicPlayerView(player) {
   };
 }
 
-function createLobby(id, hostName, playerCount) {
-  const game = createGame(playerCount);
+function createBotPlayer(seat) {
   return {
+    seat,
+    displayName: sample(BOT_NAMES) || "AI Commander",
+    token: createToken(),
+    connectedAt: Date.now(),
+    isBot: true,
+  };
+}
+
+function createLobby(id, hostName, playerCount, options = {}) {
+  const game = createGame(playerCount);
+  const lobby = {
     id,
     createdAt: Date.now(),
     hostSeat: 0,
+    soloMode: Boolean(options.soloMode),
     game,
     players: [
       {
@@ -97,9 +126,21 @@ function createLobby(id, hostName, playerCount) {
         displayName: hostName,
         token: createToken(),
         connectedAt: Date.now(),
+        isBot: false,
       },
     ],
   };
+  if (lobby.soloMode) {
+    const bot = createBotPlayer(1);
+    lobby.players.push(bot);
+    const characters = randomDistinctCharacters();
+    assignCharacters(game, bot.seat, {
+      Parliament: characters[0],
+      Base: characters[1],
+      Office: characters[2],
+    });
+  }
+  return lobby;
 }
 
 function createToken() {
@@ -129,6 +170,7 @@ function joinLobby(lobby, displayName) {
     displayName,
     token: createToken(),
     connectedAt: Date.now(),
+    isBot: false,
   };
   lobby.players.push(player);
   return player;
@@ -176,10 +218,7 @@ function setCharacters(game, seat, assignments) {
   if (values.length !== 3 || new Set(values).size !== 3) {
     throw new Error("Choose three distinct characters.");
   }
-  TOWERS.forEach((tower) => {
-    nation.towers[tower].character = assignments[tower];
-  });
-  nation.ready = true;
+  assignCharacters(game, seat, assignments);
   if (game.players.every((player) => player.ready)) {
     game.started = true;
   }
@@ -362,6 +401,93 @@ function submitTurn(game, seat, submission) {
     })),
   };
   nation.lastSubmittedDay = game.day;
+}
+
+function buildBotSubmission(game, seat) {
+  const nation = getNation(game, seat);
+  if (!nation || !nation.ready || nation.lastSubmittedDay === game.day || game.finished) {
+    return null;
+  }
+
+  const ownAliveTowers = TOWERS.filter((tower) => nation.towers[tower].hp > 0);
+  const damagedOwnTowers = ownAliveTowers.filter((tower) => nation.towers[tower].hp < game.towerMaxHp)
+    .sort((left, right) => nation.towers[left].hp - nation.towers[right].hp);
+  const enemyNations = game.players.filter((player) => player.seat !== seat);
+  const enemyTargets = enemyNations.flatMap((player) => TOWERS
+    .filter((tower) => player.towers[tower].hp > 0)
+    .map((tower) => ({ targetSeat: player.seat, targetTower: tower })));
+
+  let decision = null;
+  let remainingGold = nation.gold;
+  if (nation.towers.Office.hp > 0 && remainingGold < 60) {
+    decision = { type: "Strategic Reserve", targetSeat: null, payload: "", guess: [], guesses: {} };
+    remainingGold += 50;
+  }
+
+  const actions = [];
+  const usedMoves = new Set();
+  const actionLimit = activeActionLimit(nation, decision);
+  const tryAdd = (action) => {
+    if (!action || usedMoves.has(action.type) || actions.length >= actionLimit) return false;
+    const cost = actionCost(action.type);
+    if (remainingGold < cost) return false;
+    usedMoves.add(action.type);
+    remainingGold -= cost;
+    actions.push(action);
+    return true;
+  };
+
+  if (damagedOwnTowers.length && remainingGold >= actionCost("Repair")) {
+    tryAdd({ type: "Repair", targetSeat: null, targetTower: damagedOwnTowers[0], guess: "" });
+  }
+  if (ownAliveTowers.length && remainingGold >= actionCost("Fortify")) {
+    tryAdd({ type: "Fortify", targetSeat: null, targetTower: damagedOwnTowers[0] || ownAliveTowers[0], guess: "" });
+  }
+  if (ownAliveTowers.some((tower) => nation.towers[tower].hp <= 70 && nation.towers[tower].hp > 1) && remainingGold >= actionCost("Evacuation")) {
+    const targetTower = ownAliveTowers
+      .filter((tower) => nation.towers[tower].hp > 1)
+      .sort((left, right) => nation.towers[left].hp - nation.towers[right].hp)[0];
+    tryAdd({ type: "Evacuation", targetSeat: null, targetTower, guess: "" });
+  }
+
+  const randomTarget = () => sample(enemyTargets);
+  if (enemyTargets.length) {
+    const strikeTarget = randomTarget();
+    tryAdd({ type: "Strike", targetSeat: strikeTarget?.targetSeat ?? null, targetTower: strikeTarget?.targetTower ?? "", guess: "" });
+  }
+  if (enemyTargets.length) {
+    const targetStrikeTarget = randomTarget();
+    tryAdd({
+      type: "Target Strike",
+      targetSeat: targetStrikeTarget?.targetSeat ?? null,
+      targetTower: targetStrikeTarget?.targetTower ?? "",
+      guess: sample(CHARACTER_POOL) || "",
+    });
+  }
+  if (enemyTargets.length) {
+    const siegeTarget = randomTarget();
+    tryAdd({
+      type: "Siege Operation",
+      targetSeat: siegeTarget?.targetSeat ?? null,
+      targetTower: siegeTarget?.targetTower ?? "",
+      guess: sample(CHARACTER_POOL) || "",
+    });
+  }
+  if (remainingGold >= actionCost("Counter")) {
+    tryAdd({ type: "Counter", targetSeat: null, targetTower: "", guess: "" });
+  } else if (remainingGold >= actionCost("Signal Jam")) {
+    tryAdd({ type: "Signal Jam", targetSeat: null, targetTower: "", guess: "" });
+  }
+  if (enemyNations.length && remainingGold >= actionCost("Move Check")) {
+    tryAdd({ type: "Move Check", targetSeat: sample(enemyNations)?.seat ?? null, targetTower: "", guess: "" });
+  }
+
+  return {
+    decision,
+    treaty: null,
+    treatyResponses: [],
+    actions,
+  };
 }
 
 function validateSubmission(game, nation, treaty, decision, actions) {
@@ -984,6 +1110,7 @@ module.exports = {
   forfeitGame,
   buildPlayerSnapshot,
   submitTurn,
+  buildBotSubmission,
   everyoneSubmitted,
   resolveDay,
 };

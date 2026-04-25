@@ -18,6 +18,7 @@ const {
   setCharacters,
   buildPlayerSnapshot,
   submitTurn,
+  buildBotSubmission,
   everyoneSubmitted,
   resolveDay,
   forfeitGame,
@@ -69,6 +70,7 @@ function buildLobbyState(lobby, token) {
     roster: lobby.players.map((player) => ({
       seat: player.seat,
       displayName: player.displayName,
+      isBot: Boolean(player.isBot),
       nationName: getNation(lobby.game, player.seat)?.nationName || "Unknown Nation",
     })),
     game: buildPlayerSnapshot(lobby.game, playerRecord.seat),
@@ -81,6 +83,23 @@ function buildLobbyState(lobby, token) {
       nationalDecisions: NATIONAL_DECISIONS,
     },
   };
+}
+
+function autoSubmitBots(lobby) {
+  lobby.players
+    .filter((player) => player.isBot)
+    .forEach((player) => {
+      const submission = buildBotSubmission(lobby.game, player.seat);
+      if (submission) {
+        submitTurn(lobby.game, player.seat, submission);
+      }
+    });
+}
+
+function allHumansSubmitted(lobby) {
+  return lobby.players
+    .filter((player) => !player.isBot)
+    .every((player) => getNation(lobby.game, player.seat)?.lastSubmittedDay === lobby.game.day);
 }
 
 function serveStatic(req, res, pathname) {
@@ -113,19 +132,21 @@ const server = http.createServer(async (req, res) => {
   try {
     if (req.method === "POST" && pathname === "/api/lobbies") {
       const body = await readBody(req);
-      const playerCount = Number(body.playerCount || 4);
+      const requestedPlayerCount = Number(body.playerCount || 4);
+      const soloMode = requestedPlayerCount === 1;
+      const playerCount = soloMode ? 2 : requestedPlayerCount;
       const displayName = String(body.displayName || "").trim();
       if (!displayName) {
         sendJson(res, 400, { error: "Display name is required." });
         return;
       }
-      if (![2, 3, 4].includes(playerCount)) {
-        sendJson(res, 400, { error: "Player count must be 2, 3, or 4." });
+      if (![1, 2, 3, 4].includes(requestedPlayerCount)) {
+        sendJson(res, 400, { error: "Player count must be 1, 2, 3, or 4." });
         return;
       }
       let id = randomLobbyCode();
       while (lobbies.has(id)) id = randomLobbyCode();
-      const lobby = createLobby(id, displayName, playerCount);
+      const lobby = createLobby(id, displayName, playerCount, { soloMode });
       lobbies.set(id, lobby);
       const host = lobby.players[0];
       sendJson(res, 200, {
@@ -166,7 +187,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       leaveLobby(lobby, body.token);
-      if (lobby.players.length === 0) {
+      if (!lobby.players.some((player) => !player.isBot)) {
         lobbies.delete(lobby.id);
       }
       sendJson(res, 200, { ok: true });
@@ -214,6 +235,9 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       submitTurn(lobby.game, player.seat, body.submission || {});
+      if (allHumansSubmitted(lobby)) {
+        autoSubmitBots(lobby);
+      }
       if (everyoneSubmitted(lobby.game)) {
         resolveDay(lobby.game);
       }

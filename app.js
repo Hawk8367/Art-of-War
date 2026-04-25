@@ -188,7 +188,7 @@ function renderRoster(snapshot) {
     .map((player) => `
       <div class="score-card">
         <h3>${player.displayName}</h3>
-        <p class="meta-text">${player.nationName}</p>
+        <p class="meta-text">${player.nationName}${player.isBot ? " · AI Bot" : ""}</p>
       </div>
     `)
     .join("");
