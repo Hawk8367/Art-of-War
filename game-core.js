@@ -17,7 +17,7 @@ const TOWERS = ["Parliament", "Base", "Office"];
 const CHARACTER_POOL = ["Aster", "Bram", "Cyra", "Dorian", "Eira", "Fen", "Galen", "Helia", "Ivor", "Junia"];
 const ATTACK_ACTIONS = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Distributed Assault"];
 const DEFENSE_ACTIONS = ["Fortify", "Repair", "Evacuation", "Sabotage", "Signal Jam", "Interception", "Counter"];
-const INTEL_ACTIONS = ["Deep Surveillance", "Identity Check", "Move Check"];
+const INTEL_ACTIONS = ["Deep Surveillance", "HP Check", "Move Check"];
 const NATIONAL_DECISIONS = [
   "War Mobilization",
   "Strategic Reserve",
@@ -277,7 +277,7 @@ function actionCost(type) {
     Interception: 50,
     Counter: 70,
     "Deep Surveillance": 100,
-    "Identity Check": 40,
+    "HP Check": 40,
     "Move Check": 60,
   };
   return table[type] || 0;
@@ -571,15 +571,15 @@ function validateSubmission(game, nation, treaty, decision, actions) {
       throw new Error("Interception is disabled in 2-player matches.");
     }
 
-    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "Identity Check", "Move Check", "Interception"].includes(action.type)) {
+    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "HP Check", "Move Check", "Interception"].includes(action.type)) {
       requireEnemySeat(action.targetSeat, action.type);
     }
 
-    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(action.type) && !validTower(action.targetTower)) {
+    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance", "HP Check"].includes(action.type) && !validTower(action.targetTower)) {
       throw new Error(`${action.type} needs a valid tower.`);
     }
 
-    if (["Target Strike", "Siege Operation", "Identity Check"].includes(action.type) && !validCharacter(action.guess)) {
+    if (["Target Strike", "Siege Operation"].includes(action.type) && !validCharacter(action.guess)) {
       throw new Error(`${action.type} needs a valid character guess.`);
     }
 
@@ -1031,9 +1031,8 @@ function resolveIntel(game, submissions, resolution) {
       source.intel.push(`${target.nationName} ${action.targetTower}: ${character}`);
       addPlayerResult(resolution, source.seat, "intel", `Successful on ${action.targetTower}: ${character}`, "Deep Surveillance");
     }
-    if (action.type === "Identity Check" && action.guess) {
-      const tower = TOWERS.find((towerName) => target.towers[towerName].character === action.guess);
-      addPlayerResult(resolution, source.seat, "intel", tower ? `Successful: ${action.guess} is at ${tower}` : `Successful: ${action.guess} not found`, "Identity Check");
+    if (action.type === "HP Check" && action.targetTower) {
+      addPlayerResult(resolution, source.seat, "intel", `Successful on ${action.targetTower}: ${target.towers[action.targetTower].hp} HP`, "HP Check");
     }
     if (action.type === "Move Check") {
       const submission = submissions.find((entry) => entry.seat === target.seat);

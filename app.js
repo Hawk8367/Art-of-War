@@ -38,7 +38,7 @@ const MOVE_COSTS = {
   Interception: 50,
   Counter: 70,
   "Deep Surveillance": 100,
-  "Identity Check": 40,
+  "HP Check": 40,
   "Move Check": 60,
   "War Mobilization": 0,
   "Strategic Reserve": 0,
@@ -71,7 +71,7 @@ const moveDescriptions = {
   Interception: "50 gold. Stop predicted attacks from one nation.",
   Counter: "70 gold. Stops the first attack and returns 60 damage.",
   "Deep Surveillance": "100 gold. Learn a tower character.",
-  "Identity Check": "40 gold. Check if a nation uses a character.",
+  "HP Check": "40 gold. Reveal the current HP of one selected enemy tower.",
   "Move Check": "60 gold. Learn all moves chosen by a nation.",
   "War Mobilization": "Free. Gain one extra action this day.",
   "Strategic Reserve": "Free. Gain 50 gold immediately.",
@@ -366,8 +366,8 @@ function getPendingInstruction(snapshot) {
   if (state.turnUi.popup?.type === "guessAfterTowerAction") {
     return `Choose the character guess for ${state.turnUi.popup.targetTower}.`;
   }
-  if (state.turnUi.popup?.type === "identityCheck") {
-    return "Identity Check selected. Choose one nation and one character.";
+  if (state.turnUi.popup?.type === "hpCheck") {
+    return "HP Check selected. Choose one enemy tower to reveal its current HP.";
   }
   if (state.turnUi.popup?.type === "nationOnlyAction") {
     return `${state.turnUi.popup.moveType} selected. Choose one target nation.`;
@@ -652,17 +652,17 @@ function renderPopup(snapshot) {
       </div>
     `;
   }
-  if (popup.type === "identityCheck") {
+  if (popup.type === "hpCheck") {
     return `
       <div class="arena-popup-backdrop"></div>
       <div class="arena-popup">
-        <h3>Identity Check</h3>
-        <p class="meta-text">Choose a nation and character.</p>
+        <h3>HP Check</h3>
+        <p class="meta-text">Choose a nation and tower.</p>
         <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
-        <select id="arena-popup-guess">${characterOptions("Select character")}</select>
+        <select id="arena-popup-tower">${towerOptions()}</select>
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
-          <button type="button" class="primary-button" data-popup-submit="identityCheck">Confirm</button>
+          <button type="button" class="primary-button" data-popup-submit="hpCheck">Confirm</button>
         </div>
       </div>
     `;
@@ -923,8 +923,8 @@ function handleMoveSelection(snapshot, moveType) {
     renderGame(snapshot);
     return;
   }
-  if (moveType === "Identity Check") {
-    state.turnUi.popup = { type: "identityCheck", moveType };
+  if (moveType === "HP Check") {
+    state.turnUi.popup = { type: "hpCheck", moveType };
     renderGame(snapshot);
     return;
   }
@@ -1021,14 +1021,14 @@ function handlePopupSubmit(snapshot, popupType) {
     renderGame(snapshot);
     return;
   }
-  if (popupType === "identityCheck") {
+  if (popupType === "hpCheck") {
     const nation = document.getElementById("arena-popup-nation")?.value || "";
-    const guess = document.getElementById("arena-popup-guess")?.value || "";
-    if (!nation || !guess) return;
+    const tower = document.getElementById("arena-popup-tower")?.value || "";
+    if (!nation || !tower) return;
     addDraftAction(snapshot, {
-      type: "Identity Check",
+      type: "HP Check",
       targetSeat: nation,
-      guess,
+      targetTower: tower,
     });
     state.turnUi.popup = null;
     renderGame(snapshot);
@@ -1723,9 +1723,9 @@ function updateActionVisibility(index) {
   const distributedWrap = document.getElementById(`distributed-wrap-${index}`);
   if (!targetLabel || !targetSelect || !towerLabel || !towerSelect || !guessWrap || !distributedWrap) return;
 
-  const needsNation = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "Identity Check", "Move Check", "Interception"].includes(type);
+  const needsNation = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "HP Check", "Move Check", "Interception"].includes(type);
   const needsTower = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(type);
-  const needsGuess = ["Target Strike", "Siege Operation", "Identity Check"].includes(type);
+  const needsGuess = ["Target Strike", "Siege Operation"].includes(type);
   const isDistributed = type === "Distributed Assault";
 
   targetLabel.classList.toggle("hidden", !needsNation);
