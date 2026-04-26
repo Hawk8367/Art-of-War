@@ -48,12 +48,14 @@
             <input id="create-name" placeholder="Commander name">
             <label class="compact-label" for="create-size">Match Size</label>
             <select id="create-size">
-              <option value="1">1 Player (vs AI)</option>
               <option value="2">2 Players</option>
               <option value="3">3 Players</option>
               <option value="4" selected>4 Players</option>
             </select>
-            <button id="create-lobby-button" class="primary-button" type="button">Create Lobby</button>
+            <div class="inline-actions inline-actions-start">
+              <button id="create-lobby-button" class="primary-button" type="button">Create Lobby</button>
+              <button id="practice-button" class="secondary-button" type="button">Practice</button>
+            </div>
           </div>
 
           <div class="action-card">
@@ -152,6 +154,34 @@
         <button id="move-guide-dismiss" class="secondary-button" type="button">Close</button>
       </div>
       <div id="move-guide-content" class="move-guide-content"></div>
+    </div>
+  </div>
+
+  <div id="practice-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" id="practice-close"></div>
+    <div class="modal-card practice-card">
+      <div class="panel-heading">
+        <div>
+          <p class="section-kicker">Practice</p>
+          <h2>Choose A Mode</h2>
+        </div>
+      </div>
+      <div class="player-forms">
+        <button id="practice-tutorial-button" class="primary-button practice-mode-button" type="button">Tutorial</button>
+        <button id="practice-regular-button" class="secondary-button practice-mode-button" type="button">Regular</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="tutorial-overlay" class="tutorial-overlay hidden" aria-hidden="true">
+    <div class="tutorial-backdrop"></div>
+    <div class="tutorial-card">
+      <p id="tutorial-step-label" class="section-kicker">Tutorial</p>
+      <h2 id="tutorial-title">Tutorial</h2>
+      <p id="tutorial-text" class="lede tutorial-text"></p>
+      <div class="inline-actions inline-actions-start">
+        <button id="tutorial-next-button" class="primary-button" type="button">Next</button>
+      </div>
     </div>
   </div>
 

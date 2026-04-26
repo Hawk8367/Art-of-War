@@ -136,6 +136,10 @@ h1 {
   gap: 12px;
 }
 
+.inline-actions-start {
+  justify-content: flex-start;
+}
+
 .primary-button,
 .secondary-button {
   border: 0;
@@ -355,6 +359,15 @@ input:disabled {
   gap: 12px;
 }
 
+.practice-card {
+  width: min(640px, calc(100vw - 24px));
+}
+
+.practice-mode-button {
+  min-height: 72px;
+  font-size: 1.05rem;
+}
+
 .log-entry {
   padding: 12px 14px;
   border-radius: 14px;
@@ -368,6 +381,59 @@ input:disabled {
 
 .hidden {
   display: none;
+}
+
+body.tutorial-active {
+  overflow: hidden;
+}
+
+.tutorial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+
+.tutorial-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(4, 8, 14, 0.72);
+  pointer-events: auto;
+}
+
+.tutorial-card {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  border-radius: 24px;
+  border: 1px solid rgba(216, 181, 106, 0.42);
+  background: rgba(13, 25, 39, 0.98);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+  z-index: 52;
+}
+
+.tutorial-text {
+  margin: 0 0 18px;
+  font-size: 0.98rem;
+  line-height: 1.6;
+}
+
+.tutorial-focus {
+  position: relative;
+  z-index: 53;
+  outline: 4px solid rgba(216, 181, 106, 0.9);
+  outline-offset: 6px;
+  border-radius: 18px;
+  box-shadow: 0 0 0 9999px rgba(4, 8, 14, 0.2);
+}
+
+.tutorial-focus.arena-tower,
+.tutorial-focus.dock-button,
+.tutorial-focus.move-chip,
+.tutorial-focus.secondary-button,
+.tutorial-focus.primary-button {
+  border-radius: 22px;
 }
 
 .warning-text {
@@ -839,5 +905,12 @@ details summary {
 
   .command-actions {
     flex-direction: column;
+  }
+
+  .tutorial-card {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
   }
 }

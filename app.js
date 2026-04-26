@@ -19,6 +19,98 @@ const state = {
     popup: null,
   },
   lastSeenDisplayDay: null,
+  tutorial: {
+    active: false,
+    step: 0,
+  },
+  practiceMode: "",
+};
+
+const TUTORIAL_STEPS = {
+  1: {
+    title: "Choose Characters",
+    text: "Choose the character you want to have for each tower. Make sure to choose wisely since your opponents will be trying to guess these! Click next to continue.",
+    targetSelectors: ["#setup-grid"],
+    nextLabel: "Next",
+    allowsNext: true,
+  },
+  2: {
+    title: "Lock In Characters",
+    text: "Once you have chosen your characters make sure to lock them in!",
+    targetSelectors: ["#ready-button"],
+    allowsNext: false,
+  },
+  3: {
+    title: "Your Towers",
+    text: "These are your towers, the health of each of these towers will display and update each time they take damage.",
+    targetSelectors: [".arena-nation.is-self .arena-tower"],
+    nextLabel: "Next",
+    allowsNext: true,
+  },
+  4: {
+    title: "Enemy Towers",
+    text: "These are your enemy towers. Only a status of Alive or Destroyed will display, you will not know the health of their towers.",
+    targetSelectors: [".arena-nation:not(.is-self) .arena-tower"],
+    nextLabel: "Next",
+    allowsNext: true,
+  },
+  5: {
+    title: "National Decisions",
+    text: "These are your National Decisions. For each round your Office Tower is alive you may choose one national decision! Make sure to protect your office!",
+    targetSelectors: ["[data-category=\"decision\"]", ".arena-side .arena-sidecard:first-child", ".move-tray"],
+    nextLabel: "Next",
+    allowsNext: true,
+  },
+  6: {
+    title: "Military Actions",
+    text: "These are your military actions. They are separated into 4 categories: Intel, Jamming, Attack, Defense. You can select 3 military actions each turn as long as your base is alive! If your base dies you can only select 2 actions! Select Attack to continue.",
+    targetSelectors: ["[data-category=\"intel\"]", "[data-category=\"jamming\"]", "[data-category=\"attack\"]", "[data-category=\"defense\"]"],
+    allowsNext: false,
+  },
+  7: {
+    title: "Attack Moves",
+    text: "Attacks are how you deal damage to the enemy. Select Target Strike to continue.",
+    targetSelectors: ["[data-move=\"Target Strike\"]"],
+    allowsNext: false,
+  },
+  8: {
+    title: "Choose A Target",
+    text: "Select an enemy base to target with your attack.",
+    targetSelectors: [".arena-nation:not(.is-self) [data-tower-name=\"Base\"]"],
+    allowsNext: false,
+  },
+  9: {
+    title: "Guess The Character",
+    text: "Remember how you selected characters for your towers before the game started? If you guess the character the enemy selected for this tower Target Strike will deal double damage! Try guessing the character.",
+    targetSelectors: [".arena-popup"],
+    allowsNext: false,
+  },
+  10: {
+    title: "Submit Your Turn",
+    text: "When you have finished all your actions you must submit your turn.",
+    targetSelectors: ["[data-submit-turn=\"1\"]"],
+    allowsNext: false,
+  },
+  11: {
+    title: "Resolution Log",
+    text: "This is how you can tell what happened on the previous turn. It will show the outcome of your actions and the damage dealt to your towers, but it won't show the moves of your enemies. That's for you to figure out!",
+    targetSelectors: ["#log-panel"],
+    nextLabel: "Next",
+    allowsNext: true,
+  },
+  12: {
+    title: "Move Guide",
+    text: "Select Move Guide to see a description of each move you can make!",
+    targetSelectors: ["#move-guide-button"],
+    allowsNext: false,
+  },
+  13: {
+    title: "Tutorial Complete",
+    text: "You have completed the tutorial! Try finishing the game and defeat your enemy, good luck!!",
+    targetSelectors: ["#move-guide-modal .modal-card"],
+    nextLabel: "Finish Tutorial",
+    allowsNext: true,
+  },
 };
 
 const JAMMING_ACTIONS = ["Sabotage", "Signal Jam", "Interception", "Counter"];
@@ -94,6 +186,7 @@ const el = {
   joinName: document.getElementById("join-name"),
   joinCode: document.getElementById("join-code"),
   createLobbyButton: document.getElementById("create-lobby-button"),
+  practiceButton: document.getElementById("practice-button"),
   joinLobbyButton: document.getElementById("join-lobby-button"),
   inviteLink: document.getElementById("invite-link"),
   copyLinkButton: document.getElementById("copy-link-button"),
@@ -116,10 +209,100 @@ const el = {
   moveGuideClose: document.getElementById("move-guide-close"),
   moveGuideDismiss: document.getElementById("move-guide-dismiss"),
   moveGuideContent: document.getElementById("move-guide-content"),
+  practiceModal: document.getElementById("practice-modal"),
+  practiceClose: document.getElementById("practice-close"),
+  practiceTutorialButton: document.getElementById("practice-tutorial-button"),
+  practiceRegularButton: document.getElementById("practice-regular-button"),
+  tutorialOverlay: document.getElementById("tutorial-overlay"),
+  tutorialStepLabel: document.getElementById("tutorial-step-label"),
+  tutorialTitle: document.getElementById("tutorial-title"),
+  tutorialText: document.getElementById("tutorial-text"),
+  tutorialNextButton: document.getElementById("tutorial-next-button"),
 };
 
 function saveSession() {
   localStorage.setItem("art-of-war-session", JSON.stringify({ lobbyId: state.lobbyId, token: state.token }));
+}
+
+function getTutorialStepConfig() {
+  return TUTORIAL_STEPS[state.tutorial.step] || null;
+}
+
+function setTutorialStep(step) {
+  state.tutorial.active = step > 0;
+  state.tutorial.step = step;
+}
+
+function tutorialBlocksInteraction() {
+  return state.tutorial.active;
+}
+
+function tutorialAllows(action, detail = "") {
+  if (!tutorialBlocksInteraction()) return true;
+  const step = state.tutorial.step;
+  if (action === "tutorial-next") {
+    return Boolean(getTutorialStepConfig()?.allowsNext);
+  }
+  if (step === 1) return action === "setup-select";
+  if (step === 2) return action === "ready";
+  if (step === 3 || step === 4 || step === 5 || step === 11 || step === 13) return false;
+  if (step === 6) return action === "category" && detail === "attack";
+  if (step === 7) return action === "move" && detail === "Target Strike";
+  if (step === 8) return action === "tower" && detail === "Base";
+  if (step === 9) return action === "popup-submit" && detail === "guessAfterTowerAction";
+  if (step === 10) return action === "submit-turn";
+  if (step === 12) return action === "move-guide";
+  return true;
+}
+
+function applyTutorialFocus() {
+  document.querySelectorAll(".tutorial-focus").forEach((node) => node.classList.remove("tutorial-focus"));
+  if (!tutorialBlocksInteraction()) return;
+  const config = getTutorialStepConfig();
+  let firstTarget = null;
+  (config?.targetSelectors || []).forEach((selector) => {
+    document.querySelectorAll(selector).forEach((node) => {
+      if (!firstTarget) firstTarget = node;
+      node.classList.add("tutorial-focus");
+    });
+  });
+  firstTarget?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+}
+
+function renderTutorialOverlay() {
+  if (!tutorialBlocksInteraction()) {
+    document.body.classList.remove("tutorial-active");
+    el.tutorialOverlay.classList.add("hidden");
+    applyTutorialFocus();
+    return;
+  }
+  const config = getTutorialStepConfig();
+  if (!config) return;
+  document.body.classList.add("tutorial-active");
+  el.tutorialOverlay.classList.remove("hidden");
+  el.tutorialStepLabel.textContent = `Tutorial Step ${state.tutorial.step <= 13 ? Math.min(state.tutorial.step, 10) : state.tutorial.step}`;
+  el.tutorialTitle.textContent = config.title;
+  el.tutorialText.textContent = config.text;
+  el.tutorialNextButton.textContent = config.nextLabel || "Next";
+  el.tutorialNextButton.classList.toggle("hidden", !config.allowsNext);
+  applyTutorialFocus();
+}
+
+function advanceTutorial() {
+  if (!tutorialBlocksInteraction()) return;
+  if (!tutorialAllows("tutorial-next")) return;
+  if (state.tutorial.step === 1) setTutorialStep(2);
+  else if (state.tutorial.step === 3) setTutorialStep(4);
+  else if (state.tutorial.step === 4) {
+    state.turnUi.selectedCategory = "decision";
+    setTutorialStep(5);
+  } else if (state.tutorial.step === 5) setTutorialStep(6);
+  else if (state.tutorial.step === 11) setTutorialStep(12);
+  else if (state.tutorial.step === 13) {
+    setTutorialStep(0);
+    closeMoveGuide();
+  }
+  render();
 }
 
 function loadSession() {
@@ -223,8 +406,9 @@ function renderSetup(snapshot) {
   `;
   snapshot.constants.towers.forEach((tower) => {
     const select = document.getElementById(`setup-${tower}`);
-    select.disabled = you.ready;
+    select.disabled = you.ready || !tutorialAllows("setup-select");
     select.addEventListener("change", () => {
+      if (!tutorialAllows("setup-select")) return;
       state.setupDraft[tower] = select.value;
     });
   });
@@ -835,19 +1019,26 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-category]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!tutorialAllows("category", button.dataset.category)) return;
       state.turnUi.selectedCategory = button.dataset.category;
       state.turnUi.pending = null;
       state.turnUi.popup = null;
+      if (state.tutorial.active && state.tutorial.step === 6 && button.dataset.category === "attack") {
+        setTutorialStep(7);
+      }
       renderGame(snapshot);
+      renderTutorialOverlay();
     });
   });
   el.playerForm.querySelectorAll("[data-move]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!tutorialAllows("move", button.dataset.move)) return;
       handleMoveSelection(snapshot, button.dataset.move);
     });
   });
   el.playerForm.querySelectorAll("[data-tower-seat]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!tutorialAllows("tower", button.dataset.towerName)) return;
       handleTowerSelection(snapshot, Number(button.dataset.towerSeat), button.dataset.towerName);
     });
   });
@@ -877,6 +1068,7 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-popup-submit]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (!tutorialAllows("popup-submit", button.dataset.popupSubmit)) return;
       handlePopupSubmit(snapshot, button.dataset.popupSubmit);
     });
   });
@@ -888,6 +1080,7 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-cancel-selection]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (tutorialBlocksInteraction()) return;
       state.turnUi.pending = null;
       state.turnUi.popup = null;
       renderGame(snapshot);
@@ -965,6 +1158,9 @@ function handleMoveSelection(snapshot, moveType) {
     return;
   }
   state.turnUi.pending = { kind: "towerAction", moveType, scope: "enemy" };
+  if (state.tutorial.active && state.tutorial.step === 7 && moveType === "Target Strike") {
+    setTutorialStep(8);
+  }
   renderGame(snapshot);
 }
 
@@ -992,6 +1188,9 @@ function handleTowerSelection(snapshot, seat, towerName) {
         targetSeat: seat,
         targetTower: towerName,
       };
+      if (state.tutorial.active && state.tutorial.step === 8 && pending.moveType === "Target Strike" && towerName === "Base") {
+        setTutorialStep(9);
+      }
       renderGame(snapshot);
       return;
     }
@@ -1032,6 +1231,9 @@ function handlePopupSubmit(snapshot, popupType) {
     });
     state.turnUi.pending = null;
     state.turnUi.popup = null;
+    if (state.tutorial.active && state.tutorial.step === 9) {
+      setTutorialStep(10);
+    }
     renderGame(snapshot);
     return;
   }
@@ -1315,13 +1517,17 @@ function render() {
   el.gamePanel.classList.toggle("hidden", !connected || !snapshot.game.started);
   el.logPanel.classList.toggle("hidden", !connected || !snapshot.game.started);
 
-  if (!snapshot) return;
+  if (!snapshot) {
+    renderTutorialOverlay();
+    return;
+  }
   renderRoster(snapshot);
   renderSetup(snapshot);
   if (snapshot.game.started) {
     renderGame(snapshot);
     renderLogs(snapshot);
   }
+  renderTutorialOverlay();
 }
 
 function collectCharacters() {
@@ -1393,12 +1599,12 @@ function optionalNumber(value) {
   return value === "" || value == null ? null : Number(value);
 }
 
-async function createLobby() {
+async function createLobby(playerCountOverride = null) {
   const payload = await api("/api/lobbies", {
     method: "POST",
     body: {
       displayName: el.createName.value.trim(),
-      playerCount: Number(el.createSize.value),
+      playerCount: Number(playerCountOverride || el.createSize.value),
     },
   });
   state.lobbyId = payload.lobbyId;
@@ -1407,6 +1613,25 @@ async function createLobby() {
   history.replaceState({}, "", `/?lobby=${payload.lobbyId}`);
   beginPolling();
   await refreshState();
+}
+
+function openPracticeModal() {
+  el.practiceModal.classList.remove("hidden");
+}
+
+function closePracticeModal() {
+  el.practiceModal.classList.add("hidden");
+}
+
+async function startPractice(mode) {
+  closePracticeModal();
+  state.practiceMode = mode;
+  if (mode === "tutorial") {
+    setTutorialStep(1);
+  } else {
+    setTutorialStep(0);
+  }
+  await createLobby(1);
 }
 
 async function joinLobby() {
@@ -1431,6 +1656,8 @@ function clearSession() {
   state.pendingSnapshot = null;
   state.selectedLogDay = null;
   state.turnDraft = null;
+  state.practiceMode = "";
+  setTutorialStep(0);
   resetTurnUi();
   if (state.pollHandle) {
     clearInterval(state.pollHandle);
@@ -1438,10 +1665,13 @@ function clearSession() {
   }
   localStorage.removeItem("art-of-war-session");
   history.replaceState({}, "", "/");
+  closePracticeModal();
+  closeMoveGuide();
   render();
 }
 
 async function readyUp() {
+  if (!tutorialAllows("ready")) return;
   await api("/api/setup", {
     method: "POST",
     body: {
@@ -1456,9 +1686,14 @@ async function readyUp() {
     Office: "",
   };
   await refreshState();
+  if (state.tutorial.active && state.tutorial.step === 2 && state.snapshot?.game?.started) {
+    setTutorialStep(3);
+    render();
+  }
 }
 
 async function submitTurn() {
+  if (!tutorialAllows("submit-turn")) return;
   const snapshot = await api("/api/submit", {
     method: "POST",
     body: {
@@ -1471,6 +1706,10 @@ async function submitTurn() {
   state.turnUi.popup = null;
   applySnapshot(snapshot);
   window.alert("Turn submitted successfully.");
+  if (state.tutorial.active && state.tutorial.step === 10) {
+    setTutorialStep(11);
+    render();
+  }
 }
 
 async function leaveLobby() {
@@ -1862,7 +2101,12 @@ function renderMoveGuide() {
 }
 
 function openMoveGuide() {
+  if (!tutorialAllows("move-guide")) return;
   el.moveGuideModal.classList.remove("hidden");
+  if (state.tutorial.active && state.tutorial.step === 12) {
+    setTutorialStep(13);
+    renderTutorialOverlay();
+  }
 }
 
 function closeMoveGuide() {
@@ -1870,6 +2114,7 @@ function closeMoveGuide() {
 }
 
 el.createLobbyButton.addEventListener("click", () => createLobby().catch((error) => window.alert(error.message)));
+el.practiceButton.addEventListener("click", openPracticeModal);
 el.joinLobbyButton.addEventListener("click", () => joinLobby().catch((error) => window.alert(error.message)));
 el.readyButton.addEventListener("click", () => readyUp().catch((error) => window.alert(error.message)));
 el.submitTurnButton.addEventListener("click", () => submitTurn().catch((error) => window.alert(error.message)));
@@ -1882,6 +2127,10 @@ el.leaveMatchButton.addEventListener("click", clearSession);
 el.moveGuideButton.addEventListener("click", openMoveGuide);
 el.moveGuideClose.addEventListener("click", closeMoveGuide);
 el.moveGuideDismiss.addEventListener("click", closeMoveGuide);
+el.practiceClose.addEventListener("click", closePracticeModal);
+el.practiceTutorialButton.addEventListener("click", () => startPractice("tutorial").catch((error) => window.alert(error.message)));
+el.practiceRegularButton.addEventListener("click", () => startPractice("regular").catch((error) => window.alert(error.message)));
+el.tutorialNextButton.addEventListener("click", advanceTutorial);
 
 renderMoveGuide();
 loadSession();
