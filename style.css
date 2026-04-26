@@ -552,6 +552,22 @@ details summary {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
 }
 
+.arena-tower-intel {
+  position: absolute;
+  top: -10px;
+  left: -8px;
+  max-width: 84px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgba(53, 110, 175, 0.94);
+  color: #eef7ff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+}
+
 .arena-tower-threat-icon {
   width: 10px;
   height: 10px;
@@ -559,6 +575,33 @@ details summary {
   background:
     radial-gradient(circle at center, #fff4ef 0 28%, transparent 30%),
     radial-gradient(circle at center, transparent 0 48%, #fff4ef 50% 68%, transparent 70%);
+}
+
+.arena-damage-burst {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -54%);
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.arena-damage-emoji {
+  grid-area: 1 / 1;
+  font-size: 2rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+}
+
+.arena-damage-value {
+  grid-area: 1 / 1;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #fff8de;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  transform: translateY(1px);
 }
 
 .nation-azure .arena-tower {

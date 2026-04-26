@@ -341,6 +341,15 @@ function getArenaSeatLayout(playerCount) {
   return layouts[playerCount] || layouts[4];
 }
 
+function getRotatedNations(snapshot) {
+  const currentSeat = snapshot.game.playerSeat;
+  return [...snapshot.game.nations].sort((left, right) => {
+    const leftOffset = (left.seat - currentSeat + snapshot.game.playerCount) % snapshot.game.playerCount;
+    const rightOffset = (right.seat - currentSeat + snapshot.game.playerCount) % snapshot.game.playerCount;
+    return leftOffset - rightOffset;
+  });
+}
+
 function getTowerTotalHp(towers) {
   return Object.values(towers).reduce((sum, tower) => sum + tower.hp, 0);
 }
@@ -354,6 +363,14 @@ function getTowerBadgeText(snapshot, nation, towerName, data) {
 
 function hasIncomingSiege(snapshot, seat, towerName) {
   return snapshot.game.you.incomingSieges?.some((siege) => siege.targetTower === towerName && seat === snapshot.game.playerSeat);
+}
+
+function getKnownTowerCharacter(snapshot, seat, towerName) {
+  return snapshot.game.you.knownTowerCharacters?.[seat]?.[towerName] || "";
+}
+
+function getDamageMarker(snapshot, seat, towerName) {
+  return snapshot.game.you.damageMarkers?.find((marker) => marker.targetSeat === seat && marker.targetTower === towerName) || null;
 }
 
 function getPendingInstruction(snapshot) {
@@ -501,9 +518,9 @@ function describeQueuedAction(snapshot, action) {
 
 function renderArena(snapshot) {
   const layout = getArenaSeatLayout(snapshot.game.playerCount);
-  return snapshot.game.nations.map((nation, index) => {
+  return getRotatedNations(snapshot).map((nation, index) => {
     const position = layout[index] || layout[layout.length - 1];
-    const colorClass = `nation-${NATION_COLORS[index % NATION_COLORS.length]}`;
+    const colorClass = `nation-${NATION_COLORS[nation.seat % NATION_COLORS.length]}`;
     return `
       <div class="arena-nation ${nation.seat === snapshot.game.playerSeat ? "is-self" : ""}" style="left:${position.x}%;top:${position.y}%;">
         <div class="arena-nation-name">${nation.nationName}</div>
@@ -511,6 +528,8 @@ function renderArena(snapshot) {
           ${["Parliament", "Base", "Office"].map((towerName) => {
             const tower = nation.towers[towerName];
             const selectable = isTowerSelectable(snapshot, nation, towerName, tower);
+            const knownCharacter = getKnownTowerCharacter(snapshot, nation.seat, towerName);
+            const damageMarker = getDamageMarker(snapshot, nation.seat, towerName);
             return `
               <button
                 type="button"
@@ -519,10 +538,17 @@ function renderArena(snapshot) {
                 data-tower-name="${towerName}"
                 ${selectable ? "" : "disabled"}
               >
+                ${knownCharacter ? `<span class="arena-tower-intel">${knownCharacter}</span>` : ""}
                 ${hasIncomingSiege(snapshot, nation.seat, towerName) ? `
                   <span class="arena-tower-threat" title="Incoming siege">
                     <span class="arena-tower-threat-icon"></span>
                     <span>Siege</span>
+                  </span>
+                ` : ""}
+                ${damageMarker ? `
+                  <span class="arena-damage-burst" title="${damageMarker.damage} damage dealt">
+                    <span class="arena-damage-emoji">💥</span>
+                    <span class="arena-damage-value">${damageMarker.damage}</span>
                   </span>
                 ` : ""}
                 <span class="arena-tower-name">${towerName}</span>

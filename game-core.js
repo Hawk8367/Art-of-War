@@ -81,6 +81,8 @@ function createGame(playerCount) {
       totalMobilization: false,
       fullExposureUsed: {},
       intel: [],
+      knownTowerCharacters: {},
+      damageMarkers: [],
       resolutionHistory: {},
       ready: false,
       lastSubmittedDay: 0,
@@ -186,6 +188,8 @@ function resetNationForLobbySeat(game, seat) {
   nation.totalMobilization = false;
   nation.fullExposureUsed = {};
   nation.intel = [];
+  nation.knownTowerCharacters = {};
+  nation.damageMarkers = [];
   nation.resolutionHistory = {};
   nation.ready = false;
   nation.lastSubmittedDay = 0;
@@ -330,6 +334,8 @@ function buildPlayerSnapshot(game, seat) {
       totalMobilization: nation.totalMobilization,
       fullExposureUsed: nation.fullExposureUsed,
       intel: nation.intel.slice(-8),
+      knownTowerCharacters: nation.knownTowerCharacters,
+      damageMarkers: nation.damageMarkers || [],
       ready: nation.ready,
       lastSubmittedDay: nation.lastSubmittedDay,
       activeTreaties: game.treaties
@@ -658,6 +664,7 @@ function resolveDay(game) {
   };
 
   game.players.forEach((player) => {
+    player.damageMarkers = [];
     resolution.dayStartHealth[player.seat] = totalHealth(player);
     resolution.damageDealt[player.seat] = 0;
     resolution.damageTaken[player.seat] = 0;
@@ -910,6 +917,14 @@ function applyDamage(game, resolution, sourceSeat, targetSeat, targetTower, amou
   resolution.damageDealt[sourceSeat] += finalDamage;
   resolution.damageTaken[targetSeat] += finalDamage;
   resolution.towerDamageByPlayer[targetSeat][targetTower] += finalDamage;
+  const sourcePlayer = getNation(game, sourceSeat);
+  if (sourcePlayer) {
+    sourcePlayer.damageMarkers.push({
+      targetSeat,
+      targetTower,
+      damage: finalDamage,
+    });
+  }
   resolution.currentDayAttackTargets[sourceSeat].push(`${targetSeat}:${targetTower}`);
   if (before > 0 && after === 0) {
     resolution.towersDestroyedBy[sourceSeat] += 1;
@@ -1029,6 +1044,10 @@ function resolveIntel(game, submissions, resolution) {
     if (action.type === "Deep Surveillance" && action.targetTower) {
       const character = target.towers[action.targetTower].character;
       source.intel.push(`${target.nationName} ${action.targetTower}: ${character}`);
+      if (!source.knownTowerCharacters[target.seat]) {
+        source.knownTowerCharacters[target.seat] = {};
+      }
+      source.knownTowerCharacters[target.seat][action.targetTower] = character;
       addPlayerResult(resolution, source.seat, "intel", `Successful on ${action.targetTower}: ${character}`, "Deep Surveillance");
     }
     if (action.type === "HP Check" && action.targetTower) {
