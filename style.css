@@ -538,7 +538,7 @@ details summary {
 .arena-tower-threat {
   position: absolute;
   top: -10px;
-  right: -8px;
+  left: -8px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -554,8 +554,9 @@ details summary {
 
 .arena-tower-intel {
   position: absolute;
-  top: -10px;
-  left: -8px;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   max-width: 84px;
   padding: 4px 7px;
   border-radius: 999px;
@@ -566,6 +567,7 @@ details summary {
   line-height: 1;
   text-align: center;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
+  z-index: 2;
 }
 
 .arena-tower-threat-icon {
@@ -579,8 +581,8 @@ details summary {
 
 .arena-damage-burst {
   position: absolute;
-  inset: 50% auto auto 50%;
-  transform: translate(-50%, -54%);
+  top: -10px;
+  right: -8px;
   width: 48px;
   height: 48px;
   display: grid;
