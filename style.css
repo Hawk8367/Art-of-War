@@ -391,13 +391,14 @@ body.tutorial-active {
   position: fixed;
   inset: 0;
   z-index: 50;
+  pointer-events: none;
 }
 
 .tutorial-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(4, 8, 14, 0.72);
-  pointer-events: auto;
+  pointer-events: none;
 }
 
 .tutorial-card {
@@ -411,6 +412,7 @@ body.tutorial-active {
   background: rgba(13, 25, 39, 0.98);
   box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
   z-index: 52;
+  pointer-events: auto;
 }
 
 .tutorial-text {
@@ -426,6 +428,7 @@ body.tutorial-active {
   outline-offset: 6px;
   border-radius: 18px;
   box-shadow: 0 0 0 9999px rgba(4, 8, 14, 0.2);
+  pointer-events: auto;
 }
 
 .tutorial-focus.arena-tower,

@@ -30,7 +30,7 @@ const TUTORIAL_STEPS = {
   1: {
     title: "Choose Characters",
     text: "Choose the character you want to have for each tower. Make sure to choose wisely since your opponents will be trying to guess these! Click next to continue.",
-    targetSelectors: ["#setup-grid"],
+    targetSelectors: ["#setup-panel"],
     nextLabel: "Next",
     allowsNext: true,
   },
@@ -1599,11 +1599,12 @@ function optionalNumber(value) {
   return value === "" || value == null ? null : Number(value);
 }
 
-async function createLobby(playerCountOverride = null) {
+async function createLobby(playerCountOverride = null, defaultName = "") {
+  const displayName = (el.createName.value || "").trim() || defaultName;
   const payload = await api("/api/lobbies", {
     method: "POST",
     body: {
-      displayName: el.createName.value.trim(),
+      displayName,
       playerCount: Number(playerCountOverride || el.createSize.value),
     },
   });
@@ -1631,7 +1632,7 @@ async function startPractice(mode) {
   } else {
     setTutorialStep(0);
   }
-  await createLobby(1);
+  await createLobby(1, "Player");
 }
 
 async function joinLobby() {
