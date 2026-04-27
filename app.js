@@ -255,6 +255,19 @@ function tutorialAllows(action, detail = "") {
   return true;
 }
 
+function isTutorialCharacterSelectionValid() {
+  const values = [
+    state.setupDraft.Parliament || document.getElementById("setup-Parliament")?.value || "",
+    state.setupDraft.Base || document.getElementById("setup-Base")?.value || "",
+    state.setupDraft.Office || document.getElementById("setup-Office")?.value || "",
+  ].filter(Boolean);
+  return values.length === 3 && new Set(values).size === 3;
+}
+
+function getActiveMoveSelection() {
+  return state.turnUi.pending?.moveType || state.turnUi.popup?.moveType || "";
+}
+
 function applyTutorialFocus() {
   document.querySelectorAll(".tutorial-focus").forEach((node) => node.classList.remove("tutorial-focus"));
   if (!tutorialBlocksInteraction()) return;
@@ -280,17 +293,19 @@ function renderTutorialOverlay() {
   if (!config) return;
   document.body.classList.add("tutorial-active");
   el.tutorialOverlay.classList.remove("hidden");
-  el.tutorialStepLabel.textContent = `Tutorial Step ${state.tutorial.step <= 13 ? Math.min(state.tutorial.step, 10) : state.tutorial.step}`;
+  el.tutorialStepLabel.textContent = "Tutorial";
   el.tutorialTitle.textContent = config.title;
   el.tutorialText.textContent = config.text;
   el.tutorialNextButton.textContent = config.nextLabel || "Next";
   el.tutorialNextButton.classList.toggle("hidden", !config.allowsNext);
+  el.tutorialNextButton.disabled = state.tutorial.step === 1 && !isTutorialCharacterSelectionValid();
   applyTutorialFocus();
 }
 
 function advanceTutorial() {
   if (!tutorialBlocksInteraction()) return;
   if (!tutorialAllows("tutorial-next")) return;
+  if (state.tutorial.step === 1 && !isTutorialCharacterSelectionValid()) return;
   if (state.tutorial.step === 1) setTutorialStep(2);
   else if (state.tutorial.step === 3) setTutorialStep(4);
   else if (state.tutorial.step === 4) {
@@ -775,6 +790,7 @@ function renderCategoryDock(snapshot, turnLocked) {
 function renderMoveTray(snapshot, turnLocked) {
   const category = state.turnUi.selectedCategory || "attack";
   const moves = getMovesForCategory(snapshot, category);
+  const activeMove = getActiveMoveSelection();
   if (!moves.length) return "";
   return `
     <div class="move-tray">
@@ -783,7 +799,7 @@ function renderMoveTray(snapshot, turnLocked) {
           || (category !== "decision" && getRemainingActionCount(snapshot) === 0)
           || (category === "decision" && Boolean(state.turnDraft.decision.type))
           || (category !== "decision" && isMoveAlreadyUsed(snapshot, move));
-        const selected = category === "decision" && state.turnDraft.decision.type === move;
+        const selected = (category === "decision" && state.turnDraft.decision.type === move) || activeMove === move;
         return `
           <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" ${disabled ? "disabled" : ""}>
             <span>${move}</span>
@@ -1695,6 +1711,8 @@ async function readyUp() {
 
 async function submitTurn() {
   if (!tutorialAllows("submit-turn")) return;
+  const confirmed = window.confirm("Submit this turn?");
+  if (!confirmed) return;
   const snapshot = await api("/api/submit", {
     method: "POST",
     body: {

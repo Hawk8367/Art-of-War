@@ -60,7 +60,6 @@ function createGame(playerCount) {
   const nationNames = shuffle(NATION_NAME_POOL).slice(0, playerCount);
   return {
     day: 1,
-    maxDays: 10,
     playerCount,
     towerMaxHp,
     started: false,
@@ -318,7 +317,7 @@ function buildPlayerSnapshot(game, seat) {
   return {
     playerSeat: seat,
     nationName: nation.nationName,
-    displayDay: Math.min(game.day, game.maxDays),
+    displayDay: game.day,
     started: game.started,
     finished: game.finished,
     winnerSeat: game.winnerSeat,
@@ -688,10 +687,17 @@ function resolveDay(game) {
   });
 
   const alivePlayers = game.players.filter((player) => totalHealth(player) > 0);
+  const thousandPointWinner = [...game.players]
+    .filter((player) => player.score >= 1000)
+    .sort((a, b) => {
+      const scoreDiff = b.score - a.score;
+      if (scoreDiff !== 0) return scoreDiff;
+      return totalHealth(b) - totalHealth(a);
+    })[0];
   if (alivePlayers.length === 1) {
     finishGame(game, alivePlayers[0].seat, "conquest");
-  } else if (game.day >= game.maxDays) {
-    finishGame(game);
+  } else if (thousandPointWinner) {
+    finishGame(game, thousandPointWinner.seat, "points");
   } else {
     game.day += 1;
   }

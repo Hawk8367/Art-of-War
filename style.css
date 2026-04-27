@@ -397,7 +397,7 @@ body.tutorial-active {
 .tutorial-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(4, 8, 14, 0.72);
+  background: rgba(4, 8, 14, 0.16);
   pointer-events: none;
 }
 
@@ -427,8 +427,11 @@ body.tutorial-active {
   outline: 4px solid rgba(216, 181, 106, 0.9);
   outline-offset: 6px;
   border-radius: 18px;
-  box-shadow: 0 0 0 9999px rgba(4, 8, 14, 0.2);
+  box-shadow:
+    0 0 0 2px rgba(255, 236, 179, 0.35),
+    0 0 24px rgba(216, 181, 106, 0.35);
   pointer-events: auto;
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .tutorial-focus.arena-tower,
