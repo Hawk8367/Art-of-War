@@ -638,6 +638,20 @@ function addPlayerResult(resolution, seat, category, text, label) {
   resolution.playerResults[seat][category].push(label ? { label, text } : text);
 }
 
+function formatActionGuessSuffix(action) {
+  return action?.guess ? ` (Guess: ${action.guess})` : "";
+}
+
+function formatDistributedGuessSuffix(target) {
+  return target?.guess ? ` (Guess: ${target.guess})` : "";
+}
+
+function formatFullExposureGuessText(decision) {
+  const guesses = normalizeDecisionGuesses(decision);
+  if (guesses.length !== 3) return "";
+  return ` (Guesses: Parliament ${guesses[0]}, Base ${guesses[1]}, Office ${guesses[2]})`;
+}
+
 function compareDayRanking(a, b, resolution) {
   const towerDiff = resolution.towersDestroyedBy[b.seat] - resolution.towersDestroyedBy[a.seat];
   if (towerDiff !== 0) return towerDiff;
@@ -789,6 +803,7 @@ function resolveNationalDecisions(game, submissions, resolution) {
       addPlayerResult(resolution, entry.seat, "decision", "Successful", "Total Mobilization");
     }
     if (decision.type === "Full Exposure" && decision.targetSeat !== null) {
+      const guessText = formatFullExposureGuessText(decision);
       if (!nation.fullExposureUsed[decision.targetSeat]) {
         nation.fullExposureUsed[decision.targetSeat] = true;
         const target = getNation(game, decision.targetSeat);
@@ -797,9 +812,9 @@ function resolveNationalDecisions(game, submissions, resolution) {
         const success = guesses.length === 3 && guesses.every((guess, index) => guess === actual[index]);
         if (success) {
           nation.gold += 200;
-          addPlayerResult(resolution, entry.seat, "decision", `Successful: +200 gold. ${target.nationName} fully exposed`, "Full Exposure");
+          addPlayerResult(resolution, entry.seat, "decision", `Successful: +200 gold. ${target.nationName} fully exposed${guessText}`, "Full Exposure");
         } else {
-          addPlayerResult(resolution, entry.seat, "decision", `Failure: ${target.nationName} not fully exposed`, "Full Exposure");
+          addPlayerResult(resolution, entry.seat, "decision", `Failure: ${target.nationName} not fully exposed${guessText}`, "Full Exposure");
         }
       }
     }
@@ -894,7 +909,7 @@ function queueDefense(game, action, resolution) {
       const cancelledSiege = game.pendingSieges[index];
       game.pendingSieges.splice(index, 1);
       addPlayerResult(resolution, action.seat, "jamming", `Successful on ${action.targetTower}`, "Sabotage");
-      addPlayerResult(resolution, cancelledSiege.seat, "attack", `Failure on ${getNation(game, action.seat).nationName} ${action.targetTower}: Sabotaged`, "Siege Operation");
+      addPlayerResult(resolution, cancelledSiege.seat, "attack", `Failure on ${getNation(game, action.seat).nationName} ${action.targetTower}: Sabotaged${formatActionGuessSuffix(cancelledSiege)}`, "Siege Operation");
     } else {
       addPlayerResult(resolution, action.seat, "jamming", `Failure on ${action.targetTower}: No siege found`, "Sabotage");
     }
@@ -979,36 +994,36 @@ function resolveAttacks(game, resolution) {
     if (!attacker || !defender || !action.targetTower) return;
     if (action.type === "Siege Operation") {
       game.pendingSieges.push({ seat: attacker.seat, targetSeat: defender.seat, targetTower: action.targetTower, guess: action.guess, dayToResolve: game.day + 1 });
-      addPlayerResult(resolution, attacker.seat, "attack", `Successful on ${defender.nationName} ${action.targetTower}`, "Siege Operation");
+      addPlayerResult(resolution, attacker.seat, "attack", `Successful on ${defender.nationName} ${action.targetTower}${formatActionGuessSuffix(action)}`, "Siege Operation");
       addPlayerResult(resolution, defender.seat, "summary", `Incoming siege prepared against ${action.targetTower}`);
       return;
     }
     if (treatyBlocking(game, attacker.seat, defender.seat)) {
-      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Active treaty with this nation is now broken`, action.type);
+      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Active treaty with this nation is now broken${formatActionGuessSuffix(action)}`, action.type);
       return;
     }
     if (resolution.blockedAttackers.has(`${defender.seat}:${attacker.seat}`)) {
-      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Intercepted`, action.type);
+      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Intercepted${formatActionGuessSuffix(action)}`, action.type);
       return;
     }
     if (resolution.counters[defender.seat]) {
       resolution.counters[defender.seat] = false;
       const rebound = attacker.towers[action.targetTower].hp > 0 ? action.targetTower : lowestAliveTower(attacker);
       if (rebound) applyDamage(game, resolution, defender.seat, attacker.seat, rebound, 60, "Counter");
-      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Countered`, action.type);
+      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Countered${formatActionGuessSuffix(action)}`, action.type);
       return;
     }
     if (defender.towers[action.targetTower].hp <= 0) {
-      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Target tower already destroyed`, action.type);
+      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Target tower already destroyed${formatActionGuessSuffix(action)}`, action.type);
       return;
     }
     const damage = calculateDamage(game, action, attacker, defender, resolution);
     if (damage > 0) {
       const finalDamage = resolution.fortifyMap[`${defender.seat}:${action.targetTower}`] ? Math.ceil(damage * 0.7) : damage;
-      addPlayerResult(resolution, attacker.seat, "attack", `Successful on ${defender.nationName} ${action.targetTower}: ${finalDamage} damage`, action.type);
+      addPlayerResult(resolution, attacker.seat, "attack", `Successful on ${defender.nationName} ${action.targetTower}: ${finalDamage} damage${formatActionGuessSuffix(action)}`, action.type);
       applyDamage(game, resolution, attacker.seat, defender.seat, action.targetTower, damage, action.type);
     } else {
-      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}`, action.type);
+      addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}${formatActionGuessSuffix(action)}`, action.type);
     }
   });
 }
@@ -1043,7 +1058,7 @@ function resolveDistributedAssault(game, action, resolution) {
     const amount = (guessed ? 25 : 15) + priorityBonus;
     const finalDamage = resolution.fortifyMap[`${defender.seat}:${target.targetTower}`] ? Math.ceil(amount * 0.7) : amount;
     applyDamage(game, resolution, attacker.seat, defender.seat, target.targetTower, amount, "Distributed Assault");
-    messages.push(`Successful on ${defender.nationName} ${target.targetTower}: ${finalDamage} damage`);
+    messages.push(`Successful on ${defender.nationName} ${target.targetTower}: ${finalDamage} damage${formatDistributedGuessSuffix(target)}`);
   });
   addPlayerResult(resolution, attacker.seat, "attack", messages.join(" | "), "Distributed Assault");
 }

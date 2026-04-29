@@ -564,7 +564,17 @@ function getTowerBadgeText(snapshot, nation, towerName, data) {
 }
 
 function hasIncomingSiege(snapshot, seat, towerName) {
-  return snapshot.game.you.incomingSieges?.some((siege) => siege.targetTower === towerName && seat === snapshot.game.playerSeat);
+  const incoming = snapshot.game.you.incomingSieges?.some((siege) => siege.targetTower === towerName && seat === snapshot.game.playerSeat);
+  const outgoing = snapshot.game.you.outgoingSieges?.some((siege) => siege.targetSeat === seat && siege.targetTower === towerName);
+  return incoming || outgoing;
+}
+
+function getSiegeThreatTitle(snapshot, seat, towerName) {
+  const incoming = snapshot.game.you.incomingSieges?.some((siege) => siege.targetTower === towerName && seat === snapshot.game.playerSeat);
+  if (incoming) return "Incoming siege";
+  const outgoing = snapshot.game.you.outgoingSieges?.some((siege) => siege.targetSeat === seat && siege.targetTower === towerName);
+  if (outgoing) return "Outgoing siege";
+  return "Siege";
 }
 
 function getKnownTowerCharacter(snapshot, seat, towerName) {
@@ -572,7 +582,10 @@ function getKnownTowerCharacter(snapshot, seat, towerName) {
 }
 
 function getDamageMarker(snapshot, seat, towerName) {
-  return (snapshot.game.you.damageMarkers || []).filter((marker) => marker.targetSeat === seat && marker.targetTower === towerName);
+  const totalDamage = (snapshot.game.you.damageMarkers || [])
+    .filter((marker) => marker.targetSeat === seat && marker.targetTower === towerName)
+    .reduce((sum, marker) => sum + marker.damage, 0);
+  return totalDamage > 0 ? [{ damage: totalDamage }] : [];
 }
 
 function getPendingInstruction(snapshot) {
@@ -615,7 +628,7 @@ function getPendingInstruction(snapshot) {
 }
 
 function isMoveAlreadyUsed(snapshot, moveType) {
-  if (snapshot.game.you.totalMobilization) return false;
+  if (snapshot.game.you.totalMobilization || state.turnDraft?.decision?.type === "Total Mobilization") return false;
   return state.turnDraft.actions.some((action) => action.type === moveType);
 }
 
@@ -656,28 +669,6 @@ function renderOrdersQueue(snapshot, turnLocked) {
   return actions
     ? `<div class="orders-queue">${actions}</div>`
     : `<div class="meta-text">No orders queued yet.</div>`;
-}
-
-function renderOutgoingSieges(snapshot) {
-  const outgoing = snapshot.game.you.outgoingSieges || [];
-  if (!outgoing.length) {
-    return '<div class="meta-text">No active sieges.</div>';
-  }
-  return `
-    <div class="orders-queue">
-      ${outgoing.map((siege) => {
-        const nation = snapshot.game.nations.find((entry) => entry.seat === siege.targetSeat);
-        return `
-          <div class="order-pill">
-            <div>
-              <strong>Siege Operation</strong>
-              <span>${nation?.nationName || "Unknown"} ${siege.targetTower} - resolves Day ${siege.dayToResolve}</span>
-            </div>
-          </div>
-        `;
-      }).join("")}
-    </div>
-  `;
 }
 
 function describeDecision(snapshot) {
@@ -764,7 +755,7 @@ function renderArena(snapshot) {
               >
                 ${knownCharacter ? `<span class="arena-tower-intel">${knownCharacter}</span>` : ""}
                 ${hasIncomingSiege(snapshot, nation.seat, towerName) ? `
-                  <span class="arena-tower-threat" title="Incoming siege">
+                  <span class="arena-tower-threat" title="${getSiegeThreatTitle(snapshot, nation.seat, towerName)}">
                     <span class="arena-tower-threat-icon"></span>
                     <span>Siege</span>
                   </span>
@@ -1025,11 +1016,6 @@ function renderGame(snapshot) {
               <span class="meta-text">${getRemainingActionCount(snapshot)} action(s) left</span>
             </div>
             ${renderOrdersQueue(snapshot, turnLocked)}
-            <div class="sidecard-header sidecard-subheader">
-              <h3>Active Sieges</h3>
-              <span class="meta-text">Outgoing</span>
-            </div>
-            ${renderOutgoingSieges(snapshot)}
           </div>
         </div>
 
