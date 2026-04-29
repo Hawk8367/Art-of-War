@@ -512,9 +512,11 @@ details summary {
 
 .arena-field {
   position: relative;
-  min-height: 640px;
+  width: 100%;
+  min-width: 0;
+  min-height: clamp(360px, 42vh, 560px);
   border-radius: 30px;
-  margin-bottom: 22px;
+  margin-bottom: 0;
   padding: 28px 12px;
   box-sizing: border-box;
   background:
@@ -523,6 +525,7 @@ details summary {
   border: 1px solid rgba(255, 255, 255, 0.07);
   /* visible: nations use translate(-50%,-50%); top spawns sit partly above anchor — hidden clipped titles/towers */
   overflow: visible;
+  isolation: isolate;
 }
 
 .arena-field::after {
@@ -536,7 +539,8 @@ details summary {
 
 .arena-nation {
   position: absolute;
-  width: 220px;
+  width: min(100%, 330px);
+  max-width: calc(100% - 8px);
   transform: translate(-50%, -50%);
   z-index: 1;
 }
@@ -551,13 +555,11 @@ details summary {
 
 .arena-cluster {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  justify-items: center;
-}
-
-.arena-cluster .arena-tower:first-child {
-  grid-column: 1 / span 2;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px 8px;
+  justify-items: stretch;
+  align-items: start;
+  width: 100%;
 }
 
 @keyframes arena-tower-idle {
@@ -597,7 +599,10 @@ details summary {
 
 .arena-tower {
   --hp-pct: 100;
-  width: 112px;
+  width: 100%;
+  max-width: 112px;
+  min-width: 0;
+  justify-self: center;
   min-height: 128px;
   position: relative;
   border: none;
@@ -900,21 +905,146 @@ details summary {
     inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.arena-lower {
+.arena-workspace {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
   gap: 18px;
+  align-items: start;
   margin-bottom: 18px;
+  min-width: 0;
 }
 
-.arena-side,
-.arena-command {
+.arena-side {
   display: grid;
   gap: 14px;
 }
 
-.arena-sidecard,
-.move-tray,
+/* Sticky on desktop only — on narrow viewports sticky stack covered the battlefield */
+.arena-command-deck {
+  position: sticky;
+  top: 10px;
+  z-index: 12;
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 16px 18px 18px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(14, 22, 34, 0.98) 0%, rgba(8, 12, 20, 0.99) 100%);
+  border: 3px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.55),
+    0 12px 0 rgba(0, 0, 0, 0.28),
+    0 20px 40px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 28px rgba(216, 181, 106, 0.08);
+}
+
+.arena-command-deck-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 10px 20px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.arena-command-deck-title {
+  margin: 4px 0 0;
+  font-family: "Orbitron", sans-serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f2ebe0;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+
+.arena-command-deck-hint {
+  margin: 0;
+  max-width: 420px;
+  text-align: right;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.war-panel-kicker {
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.war-panel-header h3 {
+  margin: 0;
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #eef2f8;
+}
+
+.war-panel-badge {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.arena-sidecard.war-panel {
+  border-radius: 18px;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(12, 18, 28, 0.96) 0%, rgba(8, 12, 20, 0.98) 100%);
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 10px 0 rgba(0, 0, 0, 0.25),
+    0 14px 28px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.arena-national-decision.decision-card-active {
+  border-color: rgba(216, 181, 106, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 10px 0 rgba(0, 0, 0, 0.22),
+    0 0 26px rgba(216, 181, 106, 0.2),
+    inset 0 0 20px rgba(216, 181, 106, 0.06);
+}
+
+.arena-queue-card .orders-queue {
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.war-panel-inset {
+  border-radius: 14px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+
+.move-tray-empty {
+  min-height: 72px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+
+.move-tray-empty-text {
+  margin: 0;
+  font-size: 0.88rem;
+  max-width: 36ch;
+}
+
+.arena-sidecard:not(.war-panel),
+.move-tray:not(.move-tray-empty):not(.war-panel-inset),
 .arena-dock {
   border-radius: 22px;
   padding: 14px;
@@ -930,8 +1060,12 @@ details summary {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  align-items: baseline;
+  align-items: flex-start;
   margin-bottom: 12px;
+}
+
+.war-panel-header {
+  align-items: flex-start;
 }
 
 .treaty-list,
@@ -1009,50 +1143,121 @@ details summary {
 .arena-dock {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
+  padding: 0;
+  background: transparent;
+  border: none;
 }
 
 .dock-button,
 .move-chip {
-  border: 0;
-  border-radius: 18px;
-  padding: 14px 12px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 12px 10px;
   display: grid;
   gap: 6px;
   text-align: left;
-  background: rgba(255, 255, 255, 0.05);
+  background: linear-gradient(180deg, rgba(18, 26, 38, 0.95) 0%, rgba(10, 14, 22, 0.98) 100%);
   color: var(--text);
   cursor: pointer;
-  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease, outline-color 150ms ease;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 8px 0 rgba(0, 0, 0, 0.28),
+    0 12px 20px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
+}
+
+.dock-button span:first-child,
+.move-chip span:first-child {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #dce2ec;
+  line-height: 1.25;
 }
 
 .dock-button strong,
 .move-chip strong {
-  color: var(--gold);
-  font-size: 0.84rem;
+  font-family: "Orbitron", sans-serif;
+  color: #f0d78c;
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+}
+
+.dock-button:hover:not(:disabled),
+.move-chip:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(216, 181, 106, 0.45);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.45),
+    0 10px 0 rgba(0, 0, 0, 0.22),
+    0 16px 28px rgba(216, 181, 106, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.dock-button:disabled,
+.move-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .dock-button.is-active {
-  outline: 2px solid rgba(216, 181, 106, 0.38);
-  background: rgba(216, 181, 106, 0.12);
+  border-color: rgba(255, 214, 120, 0.85);
+  background: linear-gradient(180deg, rgba(40, 32, 18, 0.95) 0%, rgba(22, 18, 12, 0.98) 100%);
+  box-shadow:
+    0 0 0 2px rgba(216, 181, 106, 0.35),
+    0 10px 0 rgba(0, 0, 0, 0.2),
+    0 0 28px rgba(255, 200, 80, 0.2),
+    inset 0 0 24px rgba(216, 181, 106, 0.1);
 }
 
 .move-chip.is-selected {
-  outline: 2px solid rgba(216, 181, 106, 0.5);
-  background: rgba(216, 181, 106, 0.16);
-  box-shadow: 0 0 20px rgba(216, 181, 106, 0.16);
+  border-color: rgba(255, 220, 140, 0.9);
+  background: linear-gradient(180deg, rgba(45, 38, 22, 0.98) 0%, rgba(20, 16, 10, 0.99) 100%);
+  box-shadow:
+    0 0 0 2px rgba(216, 181, 106, 0.4),
+    0 10px 0 rgba(0, 0, 0, 0.22),
+    0 0 32px rgba(255, 190, 60, 0.22),
+    inset 0 0 20px rgba(216, 181, 106, 0.12);
 }
 
-.move-tray {
+.move-tray:not(.move-tray-empty) {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
 }
 
-.command-actions {
+.command-actions,
+.command-actions-bar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  align-items: center;
+  gap: 10px;
+}
+
+.command-actions-bar {
+  padding-top: 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.command-bar-btn {
+  min-height: 44px;
+}
+
+.command-bar-submit.primary-button {
+  min-width: 160px;
+  font-family: "Orbitron", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow:
+    0 8px 0 rgba(0, 0, 0, 0.25),
+    0 12px 24px rgba(216, 181, 106, 0.15);
 }
 
 .sidecard-subheader {
@@ -1114,6 +1319,7 @@ details summary {
 .arena-popup-backdrop {
   position: absolute;
   inset: 0;
+  z-index: 29;
   background: rgba(7, 10, 16, 0.74);
   border-radius: 28px;
 }
@@ -1122,7 +1328,7 @@ details summary {
   position: absolute;
   top: 50%;
   left: 50%;
-  z-index: 5;
+  z-index: 30;
   width: min(420px, calc(100% - 28px));
   transform: translate(-50%, -50%);
   border-radius: 22px;
@@ -1149,9 +1355,25 @@ details summary {
   .tower-grid,
   .inline-grid,
   .arena-dock,
-  .arena-lower,
+  .arena-workspace,
   .arena-hud {
     grid-template-columns: 1fr;
+  }
+
+  .arena-command-deck {
+    position: relative;
+    top: auto;
+    z-index: auto;
+  }
+
+  .arena-command-deck-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .arena-command-deck-hint {
+    text-align: left;
+    max-width: none;
   }
 
   .page-shell {
@@ -1159,24 +1381,44 @@ details summary {
   }
 
   .arena-field {
-    min-height: 820px;
+    min-height: max(360px, min(520px, 45dvh));
   }
 
   .arena-nation {
-    width: 180px;
+    width: min(100%, 300px);
+    max-width: min(300px, calc(100vw - 64px));
+  }
+
+  .arena-cluster {
+    gap: 4px 6px;
   }
 
   .arena-tower {
-    width: 92px;
+    max-width: 96px;
     min-height: 112px;
   }
 
   .arena-tower-frame {
     min-height: 108px;
+    padding: 8px 6px 10px;
   }
 
-  .command-actions {
+  .arena-tower-crest {
+    font-size: 1.35rem;
+  }
+
+  .arena-tower-name {
+    font-size: 0.55rem;
+  }
+
+  .command-actions,
+  .command-actions-bar {
     flex-direction: column;
+    align-items: stretch;
+  }
+
+  .command-bar-submit.primary-button {
+    width: 100%;
   }
 
   .tutorial-card {

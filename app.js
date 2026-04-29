@@ -522,8 +522,8 @@ function getMovesForCategory(snapshot, category) {
   return [];
 }
 
-function getArenaSeatLayout(playerCount) {
-  const layouts = {
+function getArenaSeatLayout(playerCount, compact) {
+  const layoutsWide = {
     2: [
       { x: 50, y: 22 },
       { x: 50, y: 70 },
@@ -540,6 +540,24 @@ function getArenaSeatLayout(playerCount) {
       { x: 20, y: 42 },
     ],
   };
+  const layoutsCompact = {
+    2: [
+      { x: 50, y: 26 },
+      { x: 50, y: 74 },
+    ],
+    3: [
+      { x: 50, y: 18 },
+      { x: 16, y: 64 },
+      { x: 84, y: 64 },
+    ],
+    4: [
+      { x: 50, y: 16 },
+      { x: 88, y: 40 },
+      { x: 50, y: 78 },
+      { x: 12, y: 40 },
+    ],
+  };
+  const layouts = compact ? layoutsCompact : layoutsWide;
   return layouts[playerCount] || layouts[4];
 }
 
@@ -692,10 +710,13 @@ function describeDecision(snapshot) {
 function renderDecisionPanel(snapshot, turnLocked) {
   const hasDecision = Boolean(state.turnDraft.decision.type);
   return `
-    <div class="arena-sidecard ${hasDecision ? "decision-card-active" : ""}">
-      <div class="sidecard-header">
-        <h3>National Decision</h3>
-        <span class="meta-text">${hasDecision ? "Locked this round" : "1 available"}</span>
+    <div class="arena-sidecard war-panel arena-national-decision ${hasDecision ? "decision-card-active" : ""}">
+      <div class="sidecard-header war-panel-header">
+        <div>
+          <p class="war-panel-kicker">Strategic authority</p>
+          <h3>National Decision</h3>
+        </div>
+        <span class="meta-text war-panel-badge">${hasDecision ? "Locked this round" : "1 available"}</span>
       </div>
       ${hasDecision
         ? `
@@ -738,7 +759,9 @@ const TOWER_CREST = {
 };
 
 function renderArena(snapshot) {
-  const layout = getArenaSeatLayout(snapshot.game.playerCount);
+  const compact =
+    typeof window !== "undefined" && window.innerWidth > 0 && window.innerWidth < 900;
+  const layout = getArenaSeatLayout(snapshot.game.playerCount, compact);
   const maxHp = snapshot.game.towerMaxHp;
   return getRotatedNations(snapshot).map((nation, index) => {
     const position = layout[index] || layout[layout.length - 1];
@@ -830,9 +853,14 @@ function renderMoveTray(snapshot, turnLocked) {
   const category = state.turnUi.selectedCategory || "attack";
   const moves = getMovesForCategory(snapshot, category);
   const activeMove = getActiveMoveSelection();
-  if (!moves.length) return "";
+  if (!moves.length) {
+    return `
+    <div class="move-tray move-tray-empty war-panel-inset">
+      <p class="move-tray-empty-text">No orders in this category. Try another tab above.</p>
+    </div>`;
+  }
   return `
-    <div class="move-tray">
+    <div class="move-tray war-panel-inset">
       ${moves.map((move) => {
         const disabled = turnLocked
           || (category !== "decision" && getRemainingActionCount(snapshot) === 0)
@@ -856,9 +884,12 @@ function renderTreatiesPanel(snapshot, turnLocked) {
   }
   const you = snapshot.game.you;
   return `
-    <div class="arena-sidecard">
-      <div class="sidecard-header">
-        <h3>Treaties</h3>
+    <div class="arena-sidecard war-panel">
+      <div class="sidecard-header war-panel-header">
+        <div>
+          <p class="war-panel-kicker">Diplomacy</p>
+          <h3>Treaties</h3>
+        </div>
         <span class="meta-text">Treaties and responses</span>
       </div>
       ${you.activeTreaties.length
@@ -1022,31 +1053,40 @@ function renderGame(snapshot) {
         </div>
       </div>
 
-      <div class="arena-field">
-        ${renderArena(snapshot)}
+      <div class="arena-command-deck">
+        <header class="arena-command-deck-head">
+          <div>
+            <p class="war-panel-kicker">War room</p>
+            <h3 class="arena-command-deck-title">Command deck</h3>
+          </div>
+          <p class="arena-command-deck-hint meta-text">Choose a category, queue moves on the board, then submit.</p>
+        </header>
+        ${renderCategoryDock(snapshot, turnLocked)}
+        ${renderMoveTray(snapshot, turnLocked)}
+        <div class="command-actions command-actions-bar">
+          <button type="button" class="secondary-button command-bar-btn" data-cancel-selection="1" ${state.turnUi.pending || state.turnUi.popup ? "" : "disabled"}>Cancel Selection</button>
+          ${snapshot.game.finished ? '<button type="button" class="secondary-button command-bar-btn" data-leave-match="1">Leave Match</button>' : ""}
+          <button type="button" class="primary-button command-bar-btn command-bar-submit" data-submit-turn="1" ${turnLocked || snapshot.game.finished ? "disabled" : ""}>${snapshot.game.finished ? "Match Complete" : turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
+        </div>
       </div>
 
-      <div class="arena-lower">
-        <div class="arena-side">
+      <div class="arena-workspace">
+        <div class="arena-field">
+          ${renderArena(snapshot)}
+        </div>
+        <aside class="arena-side">
           ${renderDecisionPanel(snapshot, turnLocked)}
-          <div class="arena-sidecard">
-            <div class="sidecard-header">
-              <h3>Queued Orders</h3>
-              <span class="meta-text">${getRemainingActionCount(snapshot)} action(s) left</span>
+          <div class="arena-sidecard war-panel arena-queue-card">
+            <div class="sidecard-header war-panel-header">
+              <div>
+                <p class="war-panel-kicker">Battle plan</p>
+                <h3>Queued Orders</h3>
+              </div>
+              <span class="meta-text war-panel-badge">${getRemainingActionCount(snapshot)} left</span>
             </div>
             ${renderOrdersQueue(snapshot, turnLocked)}
           </div>
-        </div>
-
-        <div class="arena-command">
-          ${renderCategoryDock(snapshot, turnLocked)}
-          ${renderMoveTray(snapshot, turnLocked)}
-          <div class="command-actions">
-            <button type="button" class="secondary-button" data-cancel-selection="1" ${state.turnUi.pending || state.turnUi.popup ? "" : "disabled"}>Cancel Selection</button>
-            ${snapshot.game.finished ? '<button type="button" class="secondary-button" data-leave-match="1">Leave Match</button>' : ""}
-            <button type="button" class="primary-button" data-submit-turn="1" ${turnLocked || snapshot.game.finished ? "disabled" : ""}>${snapshot.game.finished ? "Match Complete" : turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
-          </div>
-        </div>
+        </aside>
       </div>
 
       <div class="arena-treaties-row ${snapshot.game.playerCount === 2 ? "hidden" : ""}">
@@ -2227,6 +2267,16 @@ el.chatInput.addEventListener("keydown", (event) => {
 });
 
 renderMoveGuide();
+
+let arenaResizeReflowTimer;
+window.addEventListener("resize", () => {
+  if (!state.snapshot?.game?.started) return;
+  clearTimeout(arenaResizeReflowTimer);
+  arenaResizeReflowTimer = window.setTimeout(() => {
+    if (!state.suppressRenderWhileEditing) render();
+  }, 120);
+});
+
 loadSession();
 if (state.lobbyId && state.token) {
   beginPolling();
