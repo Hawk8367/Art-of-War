@@ -515,11 +515,14 @@ details summary {
   min-height: 640px;
   border-radius: 30px;
   margin-bottom: 22px;
+  padding: 28px 12px;
+  box-sizing: border-box;
   background:
     radial-gradient(circle at center, rgba(255, 255, 255, 0.05), transparent 50%),
     linear-gradient(180deg, rgba(7, 12, 19, 0.72), rgba(10, 17, 26, 0.9));
   border: 1px solid rgba(255, 255, 255, 0.07);
-  overflow: hidden;
+  /* visible: nations use translate(-50%,-50%); top spawns sit partly above anchor — hidden clipped titles/towers */
+  overflow: visible;
 }
 
 .arena-field::after {
@@ -557,60 +560,257 @@ details summary {
   grid-column: 1 / span 2;
 }
 
+@keyframes arena-tower-idle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes arena-hp-shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
+@keyframes arena-select-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(255, 214, 120, 0.55),
+      0 0 18px rgba(255, 200, 80, 0.35),
+      inset 0 0 24px rgba(255, 220, 140, 0.08);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(255, 230, 160, 0.85),
+      0 0 28px rgba(255, 210, 100, 0.55),
+      inset 0 0 28px rgba(255, 235, 180, 0.12);
+  }
+}
+
 .arena-tower {
-  width: 96px;
-  min-height: 96px;
+  --hp-pct: 100;
+  width: 112px;
+  min-height: 128px;
   position: relative;
-  border-radius: 26px 26px 20px 20px;
-  border: 3px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.04);
+  border: none;
+  border-radius: 0;
+  padding: 0;
   color: var(--text);
-  padding: 10px 8px;
+  cursor: default;
+  overflow: visible;
+  background: transparent;
+  animation: arena-tower-idle 4.5s ease-in-out infinite;
+  transition: transform 160ms ease, filter 160ms ease;
+}
+
+.arena-tower-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px 10px 14px 14px;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    transparent 38%,
+    transparent 62%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  mix-blend-mode: overlay;
+}
+
+.arena-tower-frame {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  min-height: 124px;
+  padding: 10px 8px 12px;
+  border-radius: 12px 12px 16px 16px;
   display: grid;
-  align-content: center;
+  grid-template-rows: auto auto auto 1fr;
   justify-items: center;
-  gap: 4px;
-  transition: transform 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
+  gap: 6px;
+  background:
+    linear-gradient(180deg, rgba(12, 18, 28, 0.95) 0%, rgba(8, 12, 20, 0.98) 100%);
+  border: 3px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 0 rgba(0, 0, 0, 0.35),
+    0 14px 24px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.nation-azure .arena-tower .arena-tower-frame {
+  border-color: rgba(79, 164, 255, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 0 rgba(0, 0, 0, 0.35),
+    0 14px 24px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(79, 164, 255, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.nation-verdant .arena-tower .arena-tower-frame {
+  border-color: rgba(129, 208, 110, 0.72);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 0 rgba(0, 0, 0, 0.35),
+    0 14px 24px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(129, 208, 110, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.nation-amber .arena-tower .arena-tower-frame {
+  border-color: rgba(236, 208, 75, 0.78);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 0 rgba(0, 0, 0, 0.35),
+    0 14px 24px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(236, 208, 75, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.nation-crimson .arena-tower .arena-tower-frame {
+  border-color: rgba(241, 96, 96, 0.75);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.5),
+    0 10px 0 rgba(0, 0, 0, 0.35),
+    0 14px 24px rgba(0, 0, 0, 0.45),
+    0 0 20px rgba(241, 96, 96, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.arena-tower-crest {
+  font-size: 1.65rem;
+  line-height: 1;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
+  text-shadow: 0 0 12px rgba(255, 255, 255, 0.25);
+}
+
+.arena-tower-hpbar {
+  width: 100%;
+  height: 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.arena-tower-hpfill {
+  display: block;
+  height: 100%;
+  width: calc(var(--hp-pct) * 1%);
+  border-radius: 3px;
+  background: linear-gradient(180deg, #7dff9a 0%, #2db84a 45%, #0f6a2e 100%);
+  box-shadow:
+    0 0 10px rgba(80, 255, 140, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  transition: width 280ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.arena-tower--obscured .arena-tower-hpfill {
+  width: 100% !important;
+  opacity: 0;
+}
+
+.arena-tower--obscured .arena-tower-hpbar {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(40, 48, 62, 0.95),
+    rgba(40, 48, 62, 0.95) 6px,
+    rgba(28, 34, 44, 0.95) 6px,
+    rgba(28, 34, 44, 0.95) 12px
+  );
+  background-size: 200% 200%;
+  animation: arena-hp-shimmer 2.8s linear infinite;
+  border-color: rgba(255, 255, 255, 0.18);
+}
+
+.arena-tower.is-destroyed .arena-tower-hpfill {
+  width: 0 !important;
+  opacity: 0;
+}
+
+.arena-tower.is-destroyed .arena-tower-frame {
+  filter: grayscale(0.85) brightness(0.75);
+  border-color: rgba(80, 80, 90, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.6),
+    0 8px 0 rgba(0, 0, 0, 0.4),
+    inset 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.arena-tower.is-destroyed {
+  animation: none;
+  opacity: 0.88;
+}
+
+.arena-tower.is-destroyed .arena-tower-crest {
+  filter: grayscale(1) brightness(0.7);
+}
+
+.arena-tower-name {
+  font-family: "Orbitron", sans-serif;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  color: #f0ebe0;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.arena-tower-meta {
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: "Orbitron", sans-serif;
+  color: #a8b4c8;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+
+.arena-nation.is-self .arena-tower-meta {
+  color: #9ef0b0;
+  text-shadow: 0 0 8px rgba(120, 255, 160, 0.35);
 }
 
 .arena-tower.is-selectable {
   cursor: pointer;
-  border-color: rgba(255, 225, 138, 0.95);
+  animation: arena-select-pulse 1.2s ease-in-out infinite;
+}
+
+.arena-tower.is-selectable .arena-tower-frame {
+  border-color: rgba(255, 220, 120, 0.95);
   box-shadow:
-    0 0 0 5px rgba(216, 181, 106, 0.2),
-    0 0 22px rgba(216, 181, 106, 0.45);
-  background: rgba(216, 181, 106, 0.12);
+    0 0 0 2px rgba(255, 200, 80, 0.35),
+    0 12px 0 rgba(0, 0, 0, 0.3),
+    0 18px 32px rgba(255, 190, 60, 0.25),
+    inset 0 0 20px rgba(255, 220, 140, 0.12);
 }
 
 .arena-tower.is-selectable:hover {
-  transform: translateY(-3px) scale(1.05);
-  border-color: var(--gold);
-  box-shadow:
-    0 0 0 6px rgba(216, 181, 106, 0.26),
-    0 0 30px rgba(216, 181, 106, 0.58);
+  transform: translateY(-5px) scale(1.04);
+  filter: brightness(1.08);
 }
 
-.arena-tower.is-destroyed {
-  opacity: 0.55;
-  filter: saturate(0.6);
-}
-
-.arena-tower-name {
-  font-family: "Cinzel", serif;
-  font-size: 0.82rem;
-  text-align: center;
-}
-
-.arena-tower-meta {
-  font-size: 0.75rem;
-  color: var(--muted);
-  text-align: center;
+.arena-tower.is-selectable:hover .arena-tower-frame {
+  border-color: #ffe08a;
 }
 
 .arena-tower-threat {
   position: absolute;
   top: -10px;
   left: -8px;
+  z-index: 4;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -626,10 +826,10 @@ details summary {
 
 .arena-tower-intel {
   position: absolute;
-  bottom: 8px;
+  bottom: 6px;
   left: 50%;
   transform: translateX(-50%);
-  max-width: 84px;
+  max-width: 92px;
   padding: 4px 7px;
   border-radius: 999px;
   background: rgba(53, 110, 175, 0.94);
@@ -639,7 +839,7 @@ details summary {
   line-height: 1;
   text-align: center;
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.24);
-  z-index: 2;
+  z-index: 4;
 }
 
 .arena-tower-threat-icon {
@@ -655,6 +855,7 @@ details summary {
   position: absolute;
   top: -10px;
   right: -8px;
+  z-index: 4;
   width: 48px;
   height: 48px;
   display: grid;
@@ -678,20 +879,25 @@ details summary {
   transform: translateY(1px);
 }
 
-.nation-azure .arena-tower {
-  border-color: rgba(79, 164, 255, 0.65);
+.arena-tower--parliament .arena-tower-hpfill {
+  background: linear-gradient(180deg, #9ecbff 0%, #3d8eef 45%, #1a5caa 100%);
+  box-shadow:
+    0 0 10px rgba(100, 180, 255, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.nation-verdant .arena-tower {
-  border-color: rgba(129, 208, 110, 0.65);
+.arena-tower--base .arena-tower-hpfill {
+  background: linear-gradient(180deg, #c9ffa8 0%, #5cb83a 45%, #2a7018 100%);
+  box-shadow:
+    0 0 10px rgba(120, 220, 90, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
-.nation-amber .arena-tower {
-  border-color: rgba(236, 208, 75, 0.65);
-}
-
-.nation-crimson .arena-tower {
-  border-color: rgba(241, 96, 96, 0.65);
+.arena-tower--office .arena-tower-hpfill {
+  background: linear-gradient(180deg, #ffe8a0 0%, #e8a82e 45%, #a86a0a 100%);
+  box-shadow:
+    0 0 10px rgba(255, 200, 80, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 
 .arena-lower {
@@ -961,8 +1167,12 @@ details summary {
   }
 
   .arena-tower {
-    width: 78px;
-    min-height: 82px;
+    width: 92px;
+    min-height: 112px;
+  }
+
+  .arena-tower-frame {
+    min-height: 108px;
   }
 
   .command-actions {

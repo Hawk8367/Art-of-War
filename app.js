@@ -525,16 +525,16 @@ function getMovesForCategory(snapshot, category) {
 function getArenaSeatLayout(playerCount) {
   const layouts = {
     2: [
-      { x: 50, y: 16 },
+      { x: 50, y: 22 },
       { x: 50, y: 70 },
     ],
     3: [
-      { x: 50, y: 14 },
+      { x: 50, y: 20 },
       { x: 23, y: 58 },
       { x: 77, y: 58 },
     ],
     4: [
-      { x: 50, y: 12 },
+      { x: 50, y: 20 },
       { x: 80, y: 42 },
       { x: 50, y: 72 },
       { x: 20, y: 42 },
@@ -731,13 +731,21 @@ function describeQueuedAction(snapshot, action) {
   return "Ready";
 }
 
+const TOWER_CREST = {
+  Parliament: "🏛️",
+  Base: "🏰",
+  Office: "🏢",
+};
+
 function renderArena(snapshot) {
   const layout = getArenaSeatLayout(snapshot.game.playerCount);
+  const maxHp = snapshot.game.towerMaxHp;
   return getRotatedNations(snapshot).map((nation, index) => {
     const position = layout[index] || layout[layout.length - 1];
     const colorClass = `nation-${NATION_COLORS[nation.seat % NATION_COLORS.length]}`;
+    const isSelfNation = nation.seat === snapshot.game.playerSeat;
     return `
-      <div class="arena-nation ${nation.seat === snapshot.game.playerSeat ? "is-self" : ""}" style="left:${position.x}%;top:${position.y}%;">
+      <div class="arena-nation ${isSelfNation ? "is-self" : ""}" style="left:${position.x}%;top:${position.y}%;">
         <div class="arena-nation-name">${nation.nationName}</div>
         <div class="arena-cluster ${colorClass}">
           ${["Parliament", "Base", "Office"].map((towerName) => {
@@ -745,14 +753,27 @@ function renderArena(snapshot) {
             const selectable = isTowerSelectable(snapshot, nation, towerName, tower);
             const knownCharacter = getKnownTowerCharacter(snapshot, nation.seat, towerName);
             const damageMarkers = getDamageMarker(snapshot, nation.seat, towerName);
+            const slug = towerName.toLowerCase();
+            const hpPct = Math.max(0, Math.min(100, (tower.hp / maxHp) * 100));
+            const obscuredEnemy = !isSelfNation && tower.hp > 0;
             return `
               <button
                 type="button"
-                class="arena-tower ${tower.hp <= 0 ? "is-destroyed" : ""} ${selectable ? "is-selectable" : ""}"
+                class="arena-tower arena-tower--${slug} ${obscuredEnemy ? "arena-tower--obscured" : ""} ${tower.hp <= 0 ? "is-destroyed" : ""} ${selectable ? "is-selectable" : ""}"
+                style="--hp-pct: ${obscuredEnemy ? 100 : hpPct};"
                 data-tower-seat="${nation.seat}"
                 data-tower-name="${towerName}"
                 ${selectable ? "" : "disabled"}
               >
+                <span class="arena-tower-sheen" aria-hidden="true"></span>
+                <span class="arena-tower-frame">
+                  <span class="arena-tower-crest" aria-hidden="true">${TOWER_CREST[towerName] || "◆"}</span>
+                  <span class="arena-tower-hpbar" role="presentation">
+                    <span class="arena-tower-hpfill"></span>
+                  </span>
+                  <span class="arena-tower-name">${towerName}</span>
+                  <span class="arena-tower-meta">${getTowerBadgeText(snapshot, nation, towerName, tower)}</span>
+                </span>
                 ${knownCharacter ? `<span class="arena-tower-intel">${knownCharacter}</span>` : ""}
                 ${hasIncomingSiege(snapshot, nation.seat, towerName) ? `
                   <span class="arena-tower-threat" title="${getSiegeThreatTitle(snapshot, nation.seat, towerName)}">
@@ -770,8 +791,6 @@ function renderArena(snapshot) {
                     <span class="arena-damage-value">${damageMarker.damage}</span>
                   </span>
                 `).join("")}
-                <span class="arena-tower-name">${towerName}</span>
-                <span class="arena-tower-meta">${getTowerBadgeText(snapshot, nation, towerName, tower)}</span>
               </button>
             `;
           }).join("")}
