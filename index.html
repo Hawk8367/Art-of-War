@@ -11,7 +11,7 @@
 </head>
 <body>
   <div class="page-shell">
-    <header class="hero">
+    <header class="hero" id="hero-panel">
       <div>
         <p class="eyebrow">Live Multiplayer Strategy</p>
         <h1>Art of War</h1>
@@ -138,7 +138,7 @@
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel" id="rules-panel">
         <div class="panel-heading">
           <div>
             <p class="section-kicker">Rules</p>
@@ -195,6 +195,13 @@
       <div class="inline-actions inline-actions-start">
         <button id="tutorial-next-button" class="primary-button" type="button">Next</button>
       </div>
+    </div>
+  </div>
+
+  <div id="war-phase-popup" class="war-phase-popup hidden" aria-hidden="true">
+    <div class="war-phase-popup-card">
+      <div id="war-phase-popup-text"></div>
+      <button id="war-phase-popup-button" class="primary-button" type="button">Proceed to next war phase</button>
     </div>
   </div>
 

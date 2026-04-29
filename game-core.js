@@ -66,6 +66,7 @@ function createGame(playerCount) {
     finished: false,
     winnerSeat: null,
     winReason: "",
+    lastWarPhaseWinnerText: "",
     globalFirstTowerDestroyed: false,
     treaties: [],
     pendingTreatyOffers: [],
@@ -323,6 +324,7 @@ function buildPlayerSnapshot(game, seat) {
     finished: game.finished,
     winnerSeat: game.winnerSeat,
     winReason: game.winReason,
+    lastWarPhaseWinnerText: game.lastWarPhaseWinnerText || "",
     towerMaxHp: game.towerMaxHp,
     playerCount: game.playerCount,
     you: {
@@ -1149,6 +1151,9 @@ function scoreDay(game, resolution, resolvingDay) {
       : `${topPlayers.map((topPlayer) => topPlayer.nationName).join(", ")} tied and split Day ${resolvingDay}`;
     addPlayerResult(resolution, player.seat, "summary", text);
   });
+  game.lastWarPhaseWinnerText = topPlayers.length === 1
+    ? `${topPlayers[0].nationName} has won this war phase!`
+    : `${topPlayers.map((topPlayer) => topPlayer.nationName).join(", ")} tied this war phase!`;
   awardDayGold(game, resolution, topPlayers);
 }
 

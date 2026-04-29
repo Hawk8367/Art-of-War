@@ -175,12 +175,14 @@ const moveDescriptions = {
 };
 
 const el = {
+  heroPanel: document.getElementById("hero-panel"),
   heroStatus: document.getElementById("hero-status"),
   heroLobby: document.getElementById("hero-lobby"),
   landingPanel: document.getElementById("landing-panel"),
   lobbyPanel: document.getElementById("lobby-panel"),
   gamePanel: document.getElementById("game-panel"),
   logPanel: document.getElementById("log-panel"),
+  rulesPanel: document.getElementById("rules-panel"),
   createName: document.getElementById("create-name"),
   createSize: document.getElementById("create-size"),
   joinName: document.getElementById("join-name"),
@@ -221,6 +223,9 @@ const el = {
   tutorialTitle: document.getElementById("tutorial-title"),
   tutorialText: document.getElementById("tutorial-text"),
   tutorialNextButton: document.getElementById("tutorial-next-button"),
+  warPhasePopup: document.getElementById("war-phase-popup"),
+  warPhasePopupText: document.getElementById("war-phase-popup-text"),
+  warPhasePopupButton: document.getElementById("war-phase-popup-button"),
 };
 
 function saveSession() {
@@ -379,10 +384,21 @@ function applySnapshot(snapshot) {
   state.pendingSnapshot = null;
   state.inviteLink = `${window.location.origin}/?lobby=${snapshot.lobbyId}`;
   if (wasStarted && previousDay !== null && snapshot.game.displayDay > previousDay) {
-    window.alert(`All players submitted. Day ${snapshot.game.displayDay} has begun.`);
+    state.selectedLogDay = null;
+    showWarPhasePopup(snapshot.game.lastWarPhaseWinnerText || "");
   }
   state.lastSeenDisplayDay = snapshot.game.displayDay;
   render();
+}
+
+function showWarPhasePopup(text) {
+  if (!text || !el.warPhasePopup || !el.warPhasePopupText) return;
+  el.warPhasePopupText.textContent = text;
+  el.warPhasePopup.classList.remove("hidden");
+}
+
+function dismissWarPhasePopup() {
+  el.warPhasePopup.classList.add("hidden");
 }
 
 function renderRoster(snapshot) {
@@ -432,33 +448,33 @@ function renderSetup(snapshot) {
   });
 }
 
-function nationOptions(snapshot, includeEmpty = true) {
+function nationOptions(snapshot, includeEmpty = true, selectedValue = "") {
   const currentSeat = snapshot.game.playerSeat;
   const options = snapshot.game.nations
     .filter((nation) => nation.seat !== currentSeat)
-    .map((nation) => `<option value="${nation.seat}">${nation.nationName}</option>`);
-  return `${includeEmpty ? '<option value="">None</option>' : ""}${options.join("")}`;
+    .map((nation) => `<option value="${nation.seat}" ${String(selectedValue) === String(nation.seat) ? "selected" : ""}>${nation.nationName}</option>`);
+  return `${includeEmpty ? `<option value="" ${selectedValue === "" ? "selected" : ""}>None</option>` : ""}${options.join("")}`;
 }
 
-function fullExposureNationOptions(snapshot) {
+function fullExposureNationOptions(snapshot, selectedValue = "") {
   const currentSeat = snapshot.game.playerSeat;
   const used = snapshot.game.you.fullExposureUsed || {};
   const options = snapshot.game.nations
     .filter((nation) => nation.seat !== currentSeat)
-    .map((nation) => `<option value="${nation.seat}" ${used[nation.seat] ? "disabled" : ""}>${nation.nationName}${used[nation.seat] ? " (Used)" : ""}</option>`);
-  return `<option value="">None</option>${options.join("")}`;
+    .map((nation) => `<option value="${nation.seat}" ${used[nation.seat] ? "disabled" : ""} ${String(selectedValue) === String(nation.seat) ? "selected" : ""}>${nation.nationName}${used[nation.seat] ? " (Used)" : ""}</option>`);
+  return `<option value="" ${selectedValue === "" ? "selected" : ""}>None</option>${options.join("")}`;
 }
 
 function getCommanderName(snapshot, seat) {
   return snapshot.roster.find((entry) => entry.seat === seat)?.displayName || snapshot.game.nations.find((entry) => entry.seat === seat)?.nationName || "Unknown Commander";
 }
 
-function towerOptions() {
-  return `<option value="">None</option><option value="Parliament">Parliament</option><option value="Base">Base</option><option value="Office">Office</option>`;
+function towerOptions(selectedValue = "") {
+  return `<option value="" ${selectedValue === "" ? "selected" : ""}>None</option><option value="Parliament" ${selectedValue === "Parliament" ? "selected" : ""}>Parliament</option><option value="Base" ${selectedValue === "Base" ? "selected" : ""}>Base</option><option value="Office" ${selectedValue === "Office" ? "selected" : ""}>Office</option>`;
 }
 
-function characterOptions(optionalLabel = "None") {
-  return `<option value="">${optionalLabel}</option>${state.snapshot.constants.characters.map((character) => `<option value="${character}">${character}</option>`).join("")}`;
+function characterOptions(optionalLabel = "None", selectedValue = "") {
+  return `<option value="" ${selectedValue === "" ? "selected" : ""}>${optionalLabel}</option>${state.snapshot.constants.characters.map((character) => `<option value="${character}" ${selectedValue === character ? "selected" : ""}>${character}</option>`).join("")}`;
 }
 
 function getUsedActionCount() {
@@ -926,7 +942,7 @@ function renderPopup(snapshot) {
       <div class="arena-popup">
         <h3>${popup.moveType}</h3>
         <p class="meta-text">Choose the character guess for ${popup.targetTower}.</p>
-        <select id="arena-popup-guess">${characterOptions("Select character")}</select>
+        <select id="arena-popup-guess">${characterOptions("Select character", popup.guess || "")}</select>
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
           <button type="button" class="primary-button" data-popup-submit="guessAfterTowerAction">Confirm</button>
@@ -940,7 +956,7 @@ function renderPopup(snapshot) {
       <div class="arena-popup">
         <h3>${popup.moveType}</h3>
         <p class="meta-text">Choose a target nation.</p>
-        <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
+        <select id="arena-popup-nation">${nationOptions(snapshot, true, popup.nation || "")}</select>
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
           <button type="button" class="primary-button" data-popup-submit="nationOnlyAction">Confirm</button>
@@ -954,8 +970,8 @@ function renderPopup(snapshot) {
       <div class="arena-popup">
         <h3>HP Check</h3>
         <p class="meta-text">Choose a nation and tower.</p>
-        <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
-        <select id="arena-popup-tower">${towerOptions()}</select>
+        <select id="arena-popup-nation">${nationOptions(snapshot, true, popup.nation || "")}</select>
+        <select id="arena-popup-tower">${towerOptions(popup.tower || "")}</select>
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
           <button type="button" class="primary-button" data-popup-submit="hpCheck">Confirm</button>
@@ -969,7 +985,7 @@ function renderPopup(snapshot) {
       <div class="arena-popup">
         <h3>Distributed Assault</h3>
         <p class="meta-text">Optional guess for target ${popup.targets.length + 1} of 3.</p>
-        <select id="arena-popup-guess">${characterOptions("No guess")}</select>
+        <select id="arena-popup-guess">${characterOptions("No guess", popup.guess || "")}</select>
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="distributedGuess">Back</button>
           <button type="button" class="primary-button" data-popup-submit="distributedGuess">Next</button>
@@ -983,10 +999,10 @@ function renderPopup(snapshot) {
       <div class="arena-popup">
         <h3>Leader's Intervention</h3>
         <p class="meta-text">Choose a nation and one action to block.</p>
-        <select id="arena-popup-nation">${nationOptions(snapshot)}</select>
+        <select id="arena-popup-nation">${nationOptions(snapshot, true, popup.nation || "")}</select>
         <select id="arena-popup-action">
           <option value="">Select action</option>
-          ${[...snapshot.constants.attackActions, ...CORE_DEFENSE_ACTIONS, ...JAMMING_ACTIONS, ...snapshot.constants.intelActions].map((action) => `<option value="${action}">${action}</option>`).join("")}
+          ${[...snapshot.constants.attackActions, ...CORE_DEFENSE_ACTIONS, ...JAMMING_ACTIONS, ...snapshot.constants.intelActions].map((action) => `<option value="${action}" ${popup.action === action ? "selected" : ""}>${action}</option>`).join("")}
         </select>
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
@@ -1001,10 +1017,10 @@ function renderPopup(snapshot) {
       <div class="arena-popup">
         <h3>Full Exposure</h3>
         <p class="meta-text">Choose a nation and all three guesses.</p>
-        <select id="arena-popup-nation">${fullExposureNationOptions(snapshot)}</select>
+        <select id="arena-popup-nation">${fullExposureNationOptions(snapshot, popup.nation || "")}</select>
         ${snapshot.constants.towers.map((tower) => `
           <label class="compact-label" for="arena-popup-${tower}">${tower}</label>
-          <select id="arena-popup-${tower}">${characterOptions("Select character")}</select>
+          <select id="arena-popup-${tower}">${characterOptions("Select character", popup.guesses?.[tower] || "")}</select>
         `).join("")}
         <div class="popup-actions">
           <button type="button" class="secondary-button" data-popup-cancel="1">Cancel</button>
@@ -1114,6 +1130,7 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-category]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.turnUi.popup) return;
       if (!tutorialAllows("category", button.dataset.category)) return;
       state.turnUi.selectedCategory = button.dataset.category;
       state.turnUi.pending = null;
@@ -1127,24 +1144,28 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-move]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.turnUi.popup) return;
       if (!tutorialAllows("move", button.dataset.move)) return;
       handleMoveSelection(snapshot, button.dataset.move);
     });
   });
   el.playerForm.querySelectorAll("[data-tower-seat]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.turnUi.popup) return;
       if (!tutorialAllows("tower", button.dataset.towerName)) return;
       handleTowerSelection(snapshot, Number(button.dataset.towerSeat), button.dataset.towerName);
     });
   });
   el.playerForm.querySelectorAll("[data-remove-action]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.turnUi.popup) return;
       removeDraftAction(Number(button.dataset.removeAction));
       renderGame(snapshot);
     });
   });
   el.playerForm.querySelectorAll("[data-clear-decision]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.turnUi.popup) return;
       clearDecisionDraft();
       renderGame(snapshot);
     });
@@ -1167,6 +1188,36 @@ function bindArenaEvents(snapshot, turnLocked) {
       handlePopupSubmit(snapshot, button.dataset.popupSubmit);
     });
   });
+  document.getElementById("arena-popup-guess")?.addEventListener("change", (event) => {
+    if (state.turnUi.popup) {
+      state.turnUi.popup.guess = event.target.value;
+    }
+  });
+  document.getElementById("arena-popup-nation")?.addEventListener("change", (event) => {
+    if (state.turnUi.popup) {
+      state.turnUi.popup.nation = event.target.value;
+    }
+  });
+  document.getElementById("arena-popup-tower")?.addEventListener("change", (event) => {
+    if (state.turnUi.popup) {
+      state.turnUi.popup.tower = event.target.value;
+    }
+  });
+  document.getElementById("arena-popup-action")?.addEventListener("change", (event) => {
+    if (state.turnUi.popup) {
+      state.turnUi.popup.action = event.target.value;
+    }
+  });
+  ["Parliament", "Base", "Office"].forEach((tower) => {
+    document.getElementById(`arena-popup-${tower}`)?.addEventListener("change", (event) => {
+      if (state.turnUi.popup) {
+        state.turnUi.popup.guesses = {
+          ...(state.turnUi.popup.guesses || {}),
+          [tower]: event.target.value,
+        };
+      }
+    });
+  });
   el.playerForm.querySelectorAll("[data-submit-turn]").forEach((button) => {
     button.addEventListener("click", () => submitTurn().catch((error) => window.alert(error.message)));
   });
@@ -1175,6 +1226,7 @@ function bindArenaEvents(snapshot, turnLocked) {
   });
   el.playerForm.querySelectorAll("[data-cancel-selection]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (state.turnUi.popup) return;
       if (tutorialBlocksInteraction()) return;
       state.turnUi.pending = null;
       state.turnUi.popup = null;
@@ -1620,10 +1672,13 @@ function render() {
   el.leaveMatchButton.classList.toggle("hidden", !snapshot || !snapshot.game.finished);
 
   const connected = Boolean(snapshot);
+  const inGame = Boolean(snapshot?.game?.started);
+  el.heroPanel.classList.toggle("hidden", inGame);
   el.landingPanel.classList.toggle("hidden", connected);
-  el.lobbyPanel.classList.toggle("hidden", !connected);
+  el.lobbyPanel.classList.toggle("hidden", !connected || inGame);
   el.gamePanel.classList.toggle("hidden", !connected || !snapshot.game.started);
   el.logPanel.classList.toggle("hidden", !connected || !snapshot.game.started);
+  el.rulesPanel.classList.toggle("hidden", inGame);
 
   if (!snapshot) {
     renderTutorialOverlay();
@@ -1777,6 +1832,7 @@ function clearSession() {
   history.replaceState({}, "", "/");
   closePracticeModal();
   closeMoveGuide();
+  dismissWarPhasePopup();
   render();
 }
 
@@ -2258,6 +2314,7 @@ el.practiceClose.addEventListener("click", closePracticeModal);
 el.practiceTutorialButton.addEventListener("click", () => startPractice("tutorial").catch((error) => window.alert(error.message)));
 el.practiceRegularButton.addEventListener("click", () => startPractice("regular").catch((error) => window.alert(error.message)));
 el.tutorialNextButton.addEventListener("click", advanceTutorial);
+el.warPhasePopupButton.addEventListener("click", dismissWarPhasePopup);
 el.chatSendButton.addEventListener("click", () => sendChat().catch((error) => window.alert(error.message)));
 el.chatInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {
