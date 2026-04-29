@@ -267,7 +267,7 @@ describe("game-core rules", () => {
     );
 
     const goldAfterFirst = game.players[0].gold;
-    expect(goldAfterFirst).toBe(startingGold + 200 + 25 + 25 + 50 + 25);
+    expect(goldAfterFirst).toBe(startingGold + 200 + 25 + 25 + 50 + 25 + 40);
 
     resolveSubmittedDay(
       game,
@@ -283,7 +283,7 @@ describe("game-core rules", () => {
     );
 
     const secondDayGain = game.players[0].gold - goldAfterFirst;
-    expect(secondDayGain).toBe(125);
+    expect(secondDayGain).toBe(165);
     expect(game.players[0].fullExposureUsed[1]).toBe(true);
   });
 });
