@@ -522,6 +522,14 @@ function getMovesForCategory(snapshot, category) {
   return [];
 }
 
+function shouldUseGridArena(snapshot) {
+  if (typeof window === "undefined") return false;
+  if (!snapshot?.game?.started) return false;
+  const width = window.innerWidth || 0;
+  if (!width) return false;
+  return width < 980 && snapshot.game.playerCount >= 3;
+}
+
 function getArenaSeatLayout(playerCount, compact) {
   const layoutsWide = {
     2: [
@@ -534,10 +542,10 @@ function getArenaSeatLayout(playerCount, compact) {
       { x: 77, y: 58 },
     ],
     4: [
-      { x: 50, y: 20 },
-      { x: 80, y: 42 },
-      { x: 50, y: 72 },
-      { x: 20, y: 42 },
+      { x: 50, y: 18 },
+      { x: 86, y: 42 },
+      { x: 50, y: 76 },
+      { x: 14, y: 42 },
     ],
   };
   const layoutsCompact = {
@@ -758,7 +766,7 @@ const TOWER_CREST = {
   Office: "🏢",
 };
 
-function renderArena(snapshot) {
+function renderArena(snapshot, gridMode) {
   const compact =
     typeof window !== "undefined" && window.innerWidth > 0 && window.innerWidth < 900;
   const layout = getArenaSeatLayout(snapshot.game.playerCount, compact);
@@ -768,7 +776,7 @@ function renderArena(snapshot) {
     const colorClass = `nation-${NATION_COLORS[nation.seat % NATION_COLORS.length]}`;
     const isSelfNation = nation.seat === snapshot.game.playerSeat;
     return `
-      <div class="arena-nation ${isSelfNation ? "is-self" : ""}" style="left:${position.x}%;top:${position.y}%;">
+      <div class="arena-nation ${gridMode ? "arena-nation--grid" : ""} ${isSelfNation ? "is-self" : ""}" ${gridMode ? "" : `style="left:${position.x}%;top:${position.y}%;"`}>
         <div class="arena-nation-name">${nation.nationName}</div>
         <div class="arena-cluster ${colorClass}">
           ${["Parliament", "Base", "Office"].map((towerName) => {
@@ -1022,6 +1030,7 @@ function renderGame(snapshot) {
     state.turnDraft = createEmptyTurnDraft(snapshot);
     resetTurnUi();
   }
+  const gridArena = shouldUseGridArena(snapshot);
   const turnLocked = you.lastSubmittedDay === snapshot.game.displayDay;
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
   const winnerName = snapshot.game.finished && snapshot.game.winnerSeat !== null ? getCommanderName(snapshot, snapshot.game.winnerSeat) : "";
@@ -1071,8 +1080,8 @@ function renderGame(snapshot) {
       </div>
 
       <div class="arena-workspace">
-        <div class="arena-field">
-          ${renderArena(snapshot)}
+        <div class="arena-field ${gridArena ? "is-grid" : ""} playercount-${snapshot.game.playerCount}">
+          ${renderArena(snapshot, gridArena)}
         </div>
         <aside class="arena-side">
           ${renderDecisionPanel(snapshot, turnLocked)}
