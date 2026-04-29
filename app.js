@@ -204,6 +204,9 @@ const el = {
   submitTurnButton: document.getElementById("submit-turn-button"),
   logTabs: document.getElementById("log-tabs"),
   globalLog: document.getElementById("global-log"),
+  chatLog: document.getElementById("chat-log"),
+  chatInput: document.getElementById("chat-input"),
+  chatSendButton: document.getElementById("chat-send-button"),
   moveGuideButton: document.getElementById("move-guide-button"),
   moveGuideModal: document.getElementById("move-guide-modal"),
   moveGuideClose: document.getElementById("move-guide-close"),
@@ -569,7 +572,7 @@ function getKnownTowerCharacter(snapshot, seat, towerName) {
 }
 
 function getDamageMarker(snapshot, seat, towerName) {
-  return snapshot.game.you.damageMarkers?.find((marker) => marker.targetSeat === seat && marker.targetTower === towerName) || null;
+  return (snapshot.game.you.damageMarkers || []).filter((marker) => marker.targetSeat === seat && marker.targetTower === towerName);
 }
 
 function getPendingInstruction(snapshot) {
@@ -655,6 +658,28 @@ function renderOrdersQueue(snapshot, turnLocked) {
     : `<div class="meta-text">No orders queued yet.</div>`;
 }
 
+function renderOutgoingSieges(snapshot) {
+  const outgoing = snapshot.game.you.outgoingSieges || [];
+  if (!outgoing.length) {
+    return '<div class="meta-text">No active sieges.</div>';
+  }
+  return `
+    <div class="orders-queue">
+      ${outgoing.map((siege) => {
+        const nation = snapshot.game.nations.find((entry) => entry.seat === siege.targetSeat);
+        return `
+          <div class="order-pill">
+            <div>
+              <strong>Siege Operation</strong>
+              <span>${nation?.nationName || "Unknown"} ${siege.targetTower} - resolves Day ${siege.dayToResolve}</span>
+            </div>
+          </div>
+        `;
+      }).join("")}
+    </div>
+  `;
+}
+
 function describeDecision(snapshot) {
   const decision = state.turnDraft.decision;
   if (!decision.type) return "No national decision selected.";
@@ -728,7 +753,7 @@ function renderArena(snapshot) {
             const tower = nation.towers[towerName];
             const selectable = isTowerSelectable(snapshot, nation, towerName, tower);
             const knownCharacter = getKnownTowerCharacter(snapshot, nation.seat, towerName);
-            const damageMarker = getDamageMarker(snapshot, nation.seat, towerName);
+            const damageMarkers = getDamageMarker(snapshot, nation.seat, towerName);
             return `
               <button
                 type="button"
@@ -744,12 +769,16 @@ function renderArena(snapshot) {
                     <span>Siege</span>
                   </span>
                 ` : ""}
-                ${damageMarker ? `
-                  <span class="arena-damage-burst" title="${damageMarker.damage} damage dealt">
+                ${damageMarkers.map((damageMarker, markerIndex) => `
+                  <span
+                    class="arena-damage-burst"
+                    style="top:${-10 + (markerIndex * 18)}px;right:${-8 + (markerIndex * 2)}px;"
+                    title="${damageMarker.damage} damage dealt"
+                  >
                     <span class="arena-damage-emoji">💥</span>
                     <span class="arena-damage-value">${damageMarker.damage}</span>
                   </span>
-                ` : ""}
+                `).join("")}
                 <span class="arena-tower-name">${towerName}</span>
                 <span class="arena-tower-meta">${getTowerBadgeText(snapshot, nation, towerName, tower)}</span>
               </button>
@@ -801,7 +830,7 @@ function renderMoveTray(snapshot, turnLocked) {
           || (category !== "decision" && isMoveAlreadyUsed(snapshot, move));
         const selected = (category === "decision" && state.turnDraft.decision.type === move) || activeMove === move;
         return `
-          <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" ${disabled ? "disabled" : ""}>
+          <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" title="${moveDescriptions[move] || ""}" ${disabled ? "disabled" : ""}>
             <span>${move}</span>
             <strong>${MOVE_COSTS[move] === 0 ? "Free" : `${MOVE_COSTS[move]}g`}</strong>
           </button>
@@ -996,6 +1025,11 @@ function renderGame(snapshot) {
               <span class="meta-text">${getRemainingActionCount(snapshot)} action(s) left</span>
             </div>
             ${renderOrdersQueue(snapshot, turnLocked)}
+            <div class="sidecard-header sidecard-subheader">
+              <h3>Active Sieges</h3>
+              <span class="meta-text">Outgoing</span>
+            </div>
+            ${renderOutgoingSieges(snapshot)}
           </div>
         </div>
 
@@ -1518,6 +1552,19 @@ function renderLogs(snapshot) {
     : `<div class="log-entry">No private results yet.</div>`;
 }
 
+function renderChat(snapshot) {
+  const chat = snapshot.chat || [];
+  el.chatLog.innerHTML = chat.length
+    ? chat.map((message) => `
+      <div class="chat-message ${message.seat === snapshot.game.playerSeat ? "is-self" : ""}">
+        <strong>${message.displayName}</strong>
+        <span>${message.text}</span>
+      </div>
+    `).join("")
+    : `<div class="log-entry">No messages yet.</div>`;
+  el.chatLog.scrollTop = el.chatLog.scrollHeight;
+}
+
 function render() {
   const snapshot = state.snapshot;
   el.heroStatus.textContent = snapshot ? (snapshot.game.finished ? "Match Complete" : snapshot.game.started ? "In Match" : "Lobby Open") : "Not Connected";
@@ -1542,6 +1589,7 @@ function render() {
   if (snapshot.game.started) {
     renderGame(snapshot);
     renderLogs(snapshot);
+    renderChat(snapshot);
   }
   renderTutorialOverlay();
 }
@@ -1729,6 +1777,21 @@ async function submitTurn() {
     setTutorialStep(11);
     render();
   }
+}
+
+async function sendChat() {
+  const text = (el.chatInput.value || "").trim();
+  if (!text) return;
+  const snapshot = await api("/api/chat", {
+    method: "POST",
+    body: {
+      lobbyId: state.lobbyId,
+      token: state.token,
+      text,
+    },
+  });
+  el.chatInput.value = "";
+  applySnapshot(snapshot);
 }
 
 async function leaveLobby() {
@@ -2150,6 +2213,13 @@ el.practiceClose.addEventListener("click", closePracticeModal);
 el.practiceTutorialButton.addEventListener("click", () => startPractice("tutorial").catch((error) => window.alert(error.message)));
 el.practiceRegularButton.addEventListener("click", () => startPractice("regular").catch((error) => window.alert(error.message)));
 el.tutorialNextButton.addEventListener("click", advanceTutorial);
+el.chatSendButton.addEventListener("click", () => sendChat().catch((error) => window.alert(error.message)));
+el.chatInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendChat().catch((error) => window.alert(error.message));
+  }
+});
 
 renderMoveGuide();
 loadSession();

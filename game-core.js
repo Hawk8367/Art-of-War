@@ -122,6 +122,7 @@ function createLobby(id, hostName, playerCount, options = {}) {
     createdAt: Date.now(),
     hostSeat: 0,
     soloMode: Boolean(options.soloMode),
+    chat: [],
     game,
     players: [
       {
@@ -368,6 +369,13 @@ function buildPlayerSnapshot(game, seat) {
         .map((siege) => ({
           fromSeat: siege.seat,
           targetTower: siege.targetTower,
+        })),
+      outgoingSieges: game.pendingSieges
+        .filter((siege) => siege.seat === seat && siege.dayToResolve >= game.day)
+        .map((siege) => ({
+          targetSeat: siege.targetSeat,
+          targetTower: siege.targetTower,
+          dayToResolve: siege.dayToResolve,
         })),
       logDays: Object.keys(nation.resolutionHistory).map(Number).sort((a, b) => a - b),
       resolutionHistory: nation.resolutionHistory,
@@ -883,8 +891,10 @@ function queueDefense(game, action, resolution) {
   if (action.type === "Sabotage" && action.targetTower) {
     const index = game.pendingSieges.findIndex((siege) => siege.dayToResolve === game.day && siege.targetSeat === action.seat && siege.targetTower === action.targetTower);
     if (index >= 0) {
+      const cancelledSiege = game.pendingSieges[index];
       game.pendingSieges.splice(index, 1);
       addPlayerResult(resolution, action.seat, "jamming", `Successful on ${action.targetTower}`, "Sabotage");
+      addPlayerResult(resolution, cancelledSiege.seat, "attack", `Failure on ${getNation(game, action.seat).nationName} ${action.targetTower}: Sabotaged`, "Siege Operation");
     } else {
       addPlayerResult(resolution, action.seat, "jamming", `Failure on ${action.targetTower}: No siege found`, "Sabotage");
     }
@@ -1076,6 +1086,12 @@ function decayTreaties(game) {
 }
 
 function awardDayGold(game, resolution, topPlayers) {
+  game.players
+    .filter((player) => player.towers.Parliament.hp > 0)
+    .forEach((player) => {
+      player.gold += 40;
+      addPlayerResult(resolution, player.seat, "economy", "Parliament income +40 gold");
+    });
   const highestHealth = Math.max(...game.players.map(totalHealth));
   const lowestHealth = Math.min(...game.players.map(totalHealth));
   const highestPlayers = game.players.filter((player) => totalHealth(player) === highestHealth);

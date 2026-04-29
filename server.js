@@ -74,6 +74,7 @@ function buildLobbyState(lobby, token) {
       nationName: getNation(lobby.game, player.seat)?.nationName || "Unknown Nation",
     })),
     game: buildPlayerSnapshot(lobby.game, playerRecord.seat),
+    chat: (lobby.chat || []).slice(-50),
     constants: {
       towers: TOWERS,
       characters: CHARACTER_POOL,
@@ -240,6 +241,36 @@ const server = http.createServer(async (req, res) => {
       }
       if (everyoneSubmitted(lobby.game)) {
         resolveDay(lobby.game);
+      }
+      sendJson(res, 200, buildLobbyState(lobby, body.token));
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/api/chat") {
+      const body = await readBody(req);
+      const lobby = getLobby(body.lobbyId);
+      if (!lobby) {
+        sendJson(res, 404, { error: "Lobby not found." });
+        return;
+      }
+      const player = getPlayerRecord(lobby, body.token);
+      if (!player) {
+        sendJson(res, 403, { error: "Invalid player token." });
+        return;
+      }
+      const text = String(body.text || "").trim();
+      if (!text) {
+        sendJson(res, 400, { error: "Message cannot be empty." });
+        return;
+      }
+      lobby.chat.push({
+        seat: player.seat,
+        displayName: player.displayName,
+        text: text.slice(0, 300),
+        sentAt: Date.now(),
+      });
+      if (lobby.chat.length > 200) {
+        lobby.chat = lobby.chat.slice(-200);
       }
       sendJson(res, 200, buildLobbyState(lobby, body.token));
       return;

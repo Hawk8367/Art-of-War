@@ -849,6 +849,62 @@ details summary {
   gap: 12px;
 }
 
+.sidecard-subheader {
+  margin-top: 14px;
+}
+
+.chat-shell {
+  margin-top: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.chat-log {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.chat-message {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chat-message.is-self {
+  border-color: rgba(216, 181, 106, 0.28);
+  background: rgba(216, 181, 106, 0.08);
+}
+
+.chat-message strong {
+  color: var(--text);
+}
+
+.chat-message span {
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.chat-compose input {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: rgba(8, 13, 20, 0.7);
+}
+
 .arena-popup-backdrop {
   position: absolute;
   inset: 0;
