@@ -359,6 +359,42 @@ input:disabled {
   gap: 12px;
 }
 
+.move-guide-section {
+  display: grid;
+  gap: 10px;
+}
+
+.move-guide-section-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-button {
+  min-width: 52px;
+  padding: 10px 14px;
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.settings-card {
+  width: min(460px, calc(100vw - 24px));
+}
+
+.settings-menu {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-menu-button {
+  width: 100%;
+  justify-content: center;
+}
+
+.settings-menu-button-danger {
+  color: #fff1f1;
+  background: rgba(170, 39, 39, 0.92);
+}
+
 .practice-card {
   width: min(640px, calc(100vw - 24px));
 }

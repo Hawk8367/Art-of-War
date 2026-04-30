@@ -200,7 +200,7 @@ describe("game-core rules", () => {
       {
         actions: [
           { type: "Strike", targetSeat: 1, targetTower: "Parliament" },
-          { type: "Target Strike", targetSeat: 1, targetTower: "Parliament", guess: "Aster" },
+          { type: "Targeted Strike", targetSeat: 1, targetTower: "Parliament", guess: "Aster" },
         ],
       },
       {
@@ -214,7 +214,7 @@ describe("game-core rules", () => {
       game.players[0].resolutionHistory[1].some((entry) => entry.includes("Strike: Failure") && entry.includes("Countered"))
     ).toBe(true);
     expect(
-      game.players[0].resolutionHistory[1].some((entry) => entry.includes("Target Strike: Successful"))
+      game.players[0].resolutionHistory[1].some((entry) => entry.includes("Targeted Strike: Successful"))
     ).toBe(true);
   });
 

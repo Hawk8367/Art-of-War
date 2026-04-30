@@ -7,6 +7,7 @@ const state = {
   selectedLogDay: null,
   pendingSnapshot: null,
   suppressRenderWhileEditing: false,
+  returnReferenceToSettings: false,
   setupDraft: {
     Parliament: "",
     Base: "",
@@ -69,8 +70,8 @@ const TUTORIAL_STEPS = {
   },
   7: {
     title: "Attack Moves",
-    text: "Attacks are how you deal damage to the enemy. Select Target Strike to continue.",
-    targetSelectors: ["[data-move=\"Target Strike\"]"],
+    text: "Attacks are how you deal damage to the enemy. Select Targeted Strike to continue.",
+    targetSelectors: ["[data-move=\"Targeted Strike\"]"],
     allowsNext: false,
   },
   8: {
@@ -81,7 +82,7 @@ const TUTORIAL_STEPS = {
   },
   9: {
     title: "Guess The Character",
-    text: "Remember how you selected characters for your towers before the game started? If you guess the character the enemy selected for this tower Target Strike will deal double damage! Try guessing the character.",
+    text: "Remember how you selected characters for your towers before the game started? If you guess the character the enemy selected for this tower Targeted Strike will deal double damage! Try guessing the character.",
     targetSelectors: [".arena-popup"],
     allowsNext: false,
   },
@@ -119,6 +120,7 @@ const NATION_COLORS = ["azure", "verdant", "amber", "crimson"];
 const MOVE_COSTS = {
   Strike: 30,
   "Target Strike": 40,
+  "Targeted Strike": 40,
   "Siege Operation": 80,
   "Coordinated Assault": 45,
   "Distributed Assault": 50,
@@ -150,34 +152,91 @@ function resetTurnUi() {
 }
 
 const moveDescriptions = {
-  Strike: "30 gold. Deal 30 damage to one target tower.",
-  "Target Strike": "40 gold. Deal 40 damage, or 80 if you correctly guess that tower's character.",
-  "Siege Operation": "80 gold. Set up a siege for next day.",
-  "Coordinated Assault": "45 gold. Stronger follow-up if you attacked that tower last round.",
-  "Distributed Assault": "50 gold. Hit 3 separate towers with optional guesses.",
-  Fortify: "45 gold. One tower takes reduced damage.",
-  Repair: "30 gold. Restore 40 HP.",
-  Evacuation: "70 gold. A tower survives at 1 HP if it would be destroyed.",
-  Sabotage: "50 gold. Cancels one incoming siege.",
-  "Signal Jam": "40 gold. Blocks intel against your nation.",
-  Interception: "50 gold. Stop predicted attacks from one nation.",
-  Counter: "70 gold. Stops the first attack and returns 60 damage.",
-  "Deep Surveillance": "100 gold. Learn a tower character.",
-  "HP Check": "40 gold. Reveal the current HP of one selected enemy tower.",
-  "Move Check": "60 gold. Learn all moves chosen by a nation.",
-  "War Mobilization": "Free. Gain one extra action this day.",
+  Strike: "30 Gold - Basic attack that deals 30 damage to one target tower.",
+  "Target Strike": "40 Gold - Intel based attack that deals 40 damage to one target tower. This damage is increased to 80 if you correctly guess that tower's character.",
+  "Targeted Strike": "40 Gold - Intel based attack that deals 40 damage to one target tower. This damage is increased to 80 if you correctly guess that tower's character.",
+  "Siege Operation": "80 Gold - Intel based attack that deals 120 damage to one target tower, increased to 160 if you correctly guess the tower's character. This attack also takes one turn to deal damage.",
+  "Coordinated Assault": "45 Gold - Basic attack that deals 60 damage but only succeeds if you attacked that tower last round.",
+  "Distributed Assault": "50 Gold - Intel based attack that deals 15 damage to any three towers. This damage is increased to 25 for each tower that you correctly guessed the character for.",
+  Fortify: "45 Gold - Reduce damage target tower takes by 30% this turn.",
+  Repair: "30 Gold - Restore 40 HP on one target tower.",
+  Evacuation: "70 Gold - Select one target tower to evacuate. If that tower would be destroyed this turn it survives at 1 HP instead. This move fails if the tower was at 1 HP to start the round.",
+  Sabotage: "50 Gold - Select a tower with a seige targeting it, the seige will be canceled.",
+  "Signal Jam": "40 Gold - Blocks any intel action made against your nation this turn.",
+  Interception: "50 Gold - Blocks all attacks made against you by target nation this turn (this action is not enabled for 2 player modes).",
+  Counter: "70 Gold - Stops the first submitted attack against your nation this turn and returns 60 damage to the attacking nations tower.",
+  "Deep Surveillance": "100 Gold - Learn the character name of target tower.",
+  "HP Check": "40 Gold - Reveal the current HP of target tower.",
+  "Move Check": "60 Gold - Reveal all moves chosen by target nation this turn.",
+  "War Mobilization": "Free - Gain one additional military action this turn.",
   "Strategic Reserve": "Free. Gain 50 gold immediately.",
-  "Full Exposure": "Free. Guess all 3 enemy tower characters for 200 gold.",
-  "Priority Target": "30 gold. Your attacks gain +15 damage against one tower.",
+  "Full Exposure": "Free - Correctly guess all character of target nation to gain 200 gold. This may only be used once on each enemy nation.",
+  "Priority Target": "30 Gold - Your attacks gain +15 damage each against one tower this turn.",
   "Leader's Intervention": "65 gold. One chosen move from one nation fails.",
   "Total Mobilization": "150 gold. Remove repeat-move limits permanently.",
-  "Expanded Command": "70 gold. Remove the action-count cap this day.",
+  "Expanded Command": "70 Gold - Remove the military action-count cap for this turn.",
 };
+
+const moveGuideSections = [
+  {
+    title: "ATTACK",
+    moves: ["Strike", "Targeted Strike", "Siege Operation", "Coordinated Assault", "Distributed Assault"],
+  },
+  {
+    title: "DEFENSE",
+    moves: ["Fortify", "Repair", "Evacuation"],
+  },
+  {
+    title: "JAMMING",
+    moves: ["Sabotage", "Signal Jam", "Interception", "Counter"],
+  },
+  {
+    title: "INTEL",
+    moves: ["Deep Surveillance", "HP Check", "Move Check"],
+  },
+  {
+    title: "NATIONAL DECISION",
+    moves: ["War Mobilization", "Strategic Reserve", "Full Exposure", "Priority Target", "Leader's Intervention", "Total Mobilization", "Expanded Command"],
+  },
+];
+
+const moveGuideLabels = {
+  "Target Strike": "Targeted Strike",
+  "Targeted Strike": "Targeted Strike",
+};
+
+const towerGuideEntries = [
+  {
+    title: "Office",
+    text: "While the office is alive you are able to use a national decision each turn.",
+  },
+  {
+    title: "Base",
+    text: "While the base is alive you are able to use an additional attack each turn.",
+  },
+  {
+    title: "Parliament",
+    text: "While the parliament is alive you gain 40g each turn and are able to propose treaties to other nations (not enabled for two player modes).",
+  },
+];
+
+const rulesGuideEntries = [
+  "Each player controls one nation and one nation only.",
+  "Each nation has Parliament, Base, and Office towers.",
+  "2-player matches use 200 HP towers. 3-player and 4-player matches use 300 HP towers.",
+  "All players submit in secret. When everyone is locked in, the server resolves the full day at once.",
+  "Invite links let your friends join the same lobby from their own devices.",
+];
+
+function getMoveDisplayName(move) {
+  return moveGuideLabels[move] || move;
+}
 
 const el = {
   heroPanel: document.getElementById("hero-panel"),
   heroStatus: document.getElementById("hero-status"),
   heroLobby: document.getElementById("hero-lobby"),
+  heroSettingsButton: document.getElementById("hero-settings-button"),
   landingPanel: document.getElementById("landing-panel"),
   lobbyPanel: document.getElementById("lobby-panel"),
   gamePanel: document.getElementById("game-panel"),
@@ -201,8 +260,7 @@ const el = {
   statusBanner: document.getElementById("status-banner"),
   scoreboard: document.getElementById("scoreboard"),
   playerForm: document.getElementById("player-form"),
-  forfeitButton: document.getElementById("forfeit-button"),
-  leaveMatchButton: document.getElementById("leave-match-button"),
+  gameSettingsButton: document.getElementById("game-settings-button"),
   submitTurnButton: document.getElementById("submit-turn-button"),
   logTabs: document.getElementById("log-tabs"),
   globalLog: document.getElementById("global-log"),
@@ -213,7 +271,16 @@ const el = {
   moveGuideModal: document.getElementById("move-guide-modal"),
   moveGuideClose: document.getElementById("move-guide-close"),
   moveGuideDismiss: document.getElementById("move-guide-dismiss"),
+  referenceKicker: document.getElementById("reference-kicker"),
+  referenceTitle: document.getElementById("reference-title"),
   moveGuideContent: document.getElementById("move-guide-content"),
+  settingsModal: document.getElementById("settings-modal"),
+  settingsClose: document.getElementById("settings-close"),
+  settingsReturnButton: document.getElementById("settings-return-button"),
+  settingsTowerGuideButton: document.getElementById("settings-tower-guide-button"),
+  settingsMoveGuideButton: document.getElementById("settings-move-guide-button"),
+  settingsRulesButton: document.getElementById("settings-rules-button"),
+  settingsExitButton: document.getElementById("settings-exit-button"),
   practiceModal: document.getElementById("practice-modal"),
   practiceClose: document.getElementById("practice-close"),
   practiceTutorialButton: document.getElementById("practice-tutorial-button"),
@@ -255,7 +322,7 @@ function tutorialAllows(action, detail = "") {
   if (step === 2) return action === "ready";
   if (step === 3 || step === 4 || step === 5 || step === 11 || step === 13) return false;
   if (step === 6) return action === "category" && detail === "attack";
-  if (step === 7) return action === "move" && detail === "Target Strike";
+  if (step === 7) return action === "move" && detail === "Targeted Strike";
   if (step === 8) return action === "tower" && detail === "Base";
   if (step === 9) return action === "popup-submit" && detail === "guessAfterTowerAction";
   if (step === 10) return action === "submit-turn";
@@ -657,8 +724,8 @@ function getPendingInstruction(snapshot) {
   }
   if (pending.kind === "towerAction") {
     return pending.scope === "self"
-      ? `Select one of your towers for ${pending.moveType}.`
-      : `Select a target tower for ${pending.moveType}.`;
+      ? `Select one of your towers for ${getMoveDisplayName(pending.moveType)}.`
+      : `Select a target tower for ${getMoveDisplayName(pending.moveType)}.`;
   }
   if (pending.kind === "distributed") {
     return `Select target ${pending.targets.length + 1} of 3 for Distributed Assault.`;
@@ -702,7 +769,7 @@ function renderOrdersQueue(snapshot, turnLocked) {
   const actions = actionEntries.map(({ action, index }) => `
     <div class="order-pill">
       <div>
-        <strong>${action.type}</strong>
+        <strong>${getMoveDisplayName(action.type)}</strong>
         <span>${describeQueuedAction(snapshot, action)}</span>
       </div>
       ${turnLocked ? "" : `<button type="button" class="order-remove" data-remove-action="${index}">Clear</button>`}
@@ -893,7 +960,7 @@ function renderMoveTray(snapshot, turnLocked) {
         const selected = (category === "decision" && state.turnDraft.decision.type === move) || activeMove === move;
         return `
           <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" title="${moveDescriptions[move] || ""}" ${disabled ? "disabled" : ""}>
-            <span>${move}</span>
+            <span>${getMoveDisplayName(move)}</span>
             <strong>${MOVE_COSTS[move] === 0 ? "Free" : `${MOVE_COSTS[move]}g`}</strong>
           </button>
         `;
@@ -947,8 +1014,8 @@ function renderPopup(snapshot) {
   if (popup.type === "guessAfterTowerAction") {
     return `
       <div class="arena-popup-backdrop"></div>
-      <div class="arena-popup">
-        <h3>${popup.moveType}</h3>
+        <div class="arena-popup">
+        <h3>${getMoveDisplayName(popup.moveType)}</h3>
         <p class="meta-text">Choose the character guess for ${popup.targetTower}.</p>
         <select id="arena-popup-guess">${characterOptions("Select character", popup.guess || "")}</select>
         <div class="popup-actions">
@@ -1314,7 +1381,7 @@ function handleMoveSelection(snapshot, moveType) {
     return;
   }
   state.turnUi.pending = { kind: "towerAction", moveType, scope: "enemy" };
-  if (state.tutorial.active && state.tutorial.step === 7 && moveType === "Target Strike") {
+  if (state.tutorial.active && state.tutorial.step === 7 && moveType === "Targeted Strike") {
     setTutorialStep(8);
   }
   renderGame(snapshot);
@@ -1337,14 +1404,14 @@ function handleTowerSelection(snapshot, seat, towerName) {
   if (pending.kind === "towerAction") {
     if (pending.scope === "self" && seat !== snapshot.game.playerSeat) return;
     if (pending.scope === "enemy" && seat === snapshot.game.playerSeat) return;
-    if (["Target Strike", "Siege Operation"].includes(pending.moveType)) {
+    if (["Targeted Strike", "Siege Operation"].includes(pending.moveType)) {
       state.turnUi.popup = {
         type: "guessAfterTowerAction",
         moveType: pending.moveType,
         targetSeat: seat,
         targetTower: towerName,
       };
-      if (state.tutorial.active && state.tutorial.step === 8 && pending.moveType === "Target Strike" && towerName === "Base") {
+      if (state.tutorial.active && state.tutorial.step === 8 && pending.moveType === "Targeted Strike" && towerName === "Base") {
         setTutorialStep(9);
       }
       renderGame(snapshot);
@@ -1677,8 +1744,17 @@ function render() {
   el.heroLobby.textContent = state.lobbyId || "None";
   el.inviteLink.textContent = state.inviteLink || "";
   el.leaveLobbyButton.classList.toggle("hidden", !snapshot || snapshot.game.started);
-  el.forfeitButton.classList.toggle("hidden", !snapshot || !snapshot.game.started || snapshot.game.finished);
-  el.leaveMatchButton.classList.toggle("hidden", !snapshot || !snapshot.game.finished);
+  if (el.settingsExitButton) {
+    const shouldShowExit = Boolean(snapshot);
+    el.settingsExitButton.classList.toggle("hidden", !shouldShowExit);
+    if (!snapshot) {
+      el.settingsExitButton.textContent = "Forfeit";
+    } else if (!snapshot.game.started || snapshot.game.finished) {
+      el.settingsExitButton.textContent = "Leave Match";
+    } else {
+      el.settingsExitButton.textContent = "Forfeit";
+    }
+  }
 
   const connected = Boolean(snapshot);
   const inGame = Boolean(snapshot?.game?.started);
@@ -2180,9 +2256,9 @@ function updateActionVisibility(index) {
   const distributedWrap = document.getElementById(`distributed-wrap-${index}`);
   if (!targetLabel || !targetSelect || !towerLabel || !towerSelect || !guessWrap || !distributedWrap) return;
 
-  const needsNation = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "HP Check", "Move Check", "Interception"].includes(type);
-  const needsTower = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(type);
-  const needsGuess = ["Target Strike", "Siege Operation"].includes(type);
+  const needsNation = ["Strike", "Targeted Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "HP Check", "Move Check", "Interception"].includes(type);
+  const needsTower = ["Strike", "Targeted Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance"].includes(type);
+  const needsGuess = ["Targeted Strike", "Siege Operation"].includes(type);
   const isDistributed = type === "Distributed Assault";
 
   targetLabel.classList.toggle("hidden", !needsNation);
@@ -2282,19 +2358,35 @@ document.addEventListener("focusout", () => {
 });
 
 function renderMoveGuide() {
-  el.moveGuideContent.innerHTML = Object.entries(moveDescriptions)
-    .map(([move, description]) => `
-      <div class="subtle-box">
-        <strong>${move}</strong>
-        <p class="meta-text">${description}</p>
+  el.referenceKicker.textContent = "Reference";
+  el.referenceTitle.textContent = "Move Guide";
+  el.moveGuideContent.innerHTML = moveGuideSections
+    .map((section) => `
+      <div class="move-guide-section">
+        <p class="section-kicker">${section.title}</p>
+        <div class="move-guide-section-grid">
+          ${section.moves.map((move) => `
+            <div class="subtle-box">
+              <strong>${moveGuideLabels[move] || move}</strong>
+              <p class="meta-text">${moveDescriptions[move]}</p>
+            </div>
+          `).join("")}
+        </div>
       </div>
     `)
     .join("");
 }
 
-function openMoveGuide() {
-  if (!tutorialAllows("move-guide")) return;
+function openReferenceModal(renderFn, returnToSettings = false) {
+  state.returnReferenceToSettings = returnToSettings;
+  closeSettingsMenu();
+  renderFn();
   el.moveGuideModal.classList.remove("hidden");
+}
+
+function openMoveGuide(returnToSettings = false) {
+  if (!tutorialAllows("move-guide")) return;
+  openReferenceModal(renderMoveGuide, returnToSettings);
   if (state.tutorial.active && state.tutorial.step === 12) {
     setTutorialStep(13);
     renderTutorialOverlay();
@@ -2303,6 +2395,70 @@ function openMoveGuide() {
 
 function closeMoveGuide() {
   el.moveGuideModal.classList.add("hidden");
+  const shouldReturnToSettings = state.returnReferenceToSettings;
+  state.returnReferenceToSettings = false;
+  if (shouldReturnToSettings) {
+    openSettingsMenu();
+  }
+}
+
+function renderTowerGuide() {
+  el.referenceKicker.textContent = "Reference";
+  el.referenceTitle.textContent = "Tower Guide";
+  el.moveGuideContent.innerHTML = towerGuideEntries
+    .map((entry) => `
+      <div class="subtle-box">
+        <strong>${entry.title}</strong>
+        <p class="meta-text">${entry.text}</p>
+      </div>
+    `)
+    .join("");
+}
+
+function renderRulesGuide() {
+  el.referenceKicker.textContent = "Reference";
+  el.referenceTitle.textContent = "Rules";
+  el.moveGuideContent.innerHTML = `
+    <div class="subtle-box">
+      <ul class="rules-list">
+        ${rulesGuideEntries.map((entry) => `<li>${entry}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
+function openTowerGuide() {
+  openReferenceModal(renderTowerGuide, true);
+}
+
+function openRulesGuide() {
+  openReferenceModal(renderRulesGuide, true);
+}
+
+function openSettingsMenu() {
+  if (state.tutorial.active) return;
+  closeMoveGuide();
+  el.settingsModal.classList.remove("hidden");
+}
+
+function closeSettingsMenu() {
+  el.settingsModal.classList.add("hidden");
+}
+
+function handleSettingsExit() {
+  closeSettingsMenu();
+  if (!state.snapshot) {
+    return;
+  }
+  if (!state.snapshot.game.started) {
+    leaveLobby().catch((error) => window.alert(error.message));
+    return;
+  }
+  if (state.snapshot.game.finished) {
+    clearSession();
+    return;
+  }
+  forfeitMatch().catch((error) => window.alert(error.message));
 }
 
 el.createLobbyButton.addEventListener("click", () => createLobby().catch((error) => window.alert(error.message)));
@@ -2310,15 +2466,21 @@ el.practiceButton.addEventListener("click", openPracticeModal);
 el.joinLobbyButton.addEventListener("click", () => joinLobby().catch((error) => window.alert(error.message)));
 el.readyButton.addEventListener("click", () => readyUp().catch((error) => window.alert(error.message)));
 el.submitTurnButton.addEventListener("click", () => submitTurn().catch((error) => window.alert(error.message)));
+el.heroSettingsButton.addEventListener("click", openSettingsMenu);
+el.gameSettingsButton.addEventListener("click", openSettingsMenu);
 el.copyLinkButton.addEventListener("click", async () => {
   await navigator.clipboard.writeText(state.inviteLink);
 });
 el.leaveLobbyButton.addEventListener("click", () => leaveLobby().catch((error) => window.alert(error.message)));
-el.forfeitButton.addEventListener("click", () => forfeitMatch().catch((error) => window.alert(error.message)));
-el.leaveMatchButton.addEventListener("click", clearSession);
 el.moveGuideButton.addEventListener("click", openMoveGuide);
 el.moveGuideClose.addEventListener("click", closeMoveGuide);
 el.moveGuideDismiss.addEventListener("click", closeMoveGuide);
+el.settingsClose.addEventListener("click", closeSettingsMenu);
+el.settingsReturnButton.addEventListener("click", closeSettingsMenu);
+el.settingsTowerGuideButton.addEventListener("click", openTowerGuide);
+el.settingsMoveGuideButton.addEventListener("click", () => openMoveGuide(true));
+el.settingsRulesButton.addEventListener("click", openRulesGuide);
+el.settingsExitButton.addEventListener("click", handleSettingsExit);
 el.practiceClose.addEventListener("click", closePracticeModal);
 el.practiceTutorialButton.addEventListener("click", () => startPractice("tutorial").catch((error) => window.alert(error.message)));
 el.practiceRegularButton.addEventListener("click", () => startPractice("regular").catch((error) => window.alert(error.message)));
@@ -2341,6 +2503,17 @@ window.addEventListener("resize", () => {
   arenaResizeReflowTimer = window.setTimeout(() => {
     if (!state.suppressRenderWhileEditing) render();
   }, 120);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  if (state.tutorial.active) return;
+  event.preventDefault();
+  if (!el.settingsModal.classList.contains("hidden")) {
+    closeSettingsMenu();
+    return;
+  }
+  openSettingsMenu();
 });
 
 loadSession();

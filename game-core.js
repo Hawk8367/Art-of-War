@@ -15,7 +15,7 @@ const NATION_NAME_POOL = [
 
 const TOWERS = ["Parliament", "Base", "Office"];
 const CHARACTER_POOL = ["Aster", "Bram", "Cyra", "Dorian", "Eira", "Fen", "Galen", "Helia", "Ivor", "Junia"];
-const ATTACK_ACTIONS = ["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Distributed Assault"];
+const ATTACK_ACTIONS = ["Strike", "Targeted Strike", "Siege Operation", "Coordinated Assault", "Distributed Assault"];
 const DEFENSE_ACTIONS = ["Fortify", "Repair", "Evacuation", "Sabotage", "Signal Jam", "Interception", "Counter"];
 const INTEL_ACTIONS = ["Deep Surveillance", "HP Check", "Move Check"];
 const NATIONAL_DECISIONS = [
@@ -270,7 +270,7 @@ function totalHealth(player) {
 function actionCost(type) {
   const table = {
     Strike: 30,
-    "Target Strike": 40,
+    "Targeted Strike": 40,
     "Siege Operation": 80,
     "Coordinated Assault": 45,
     "Distributed Assault": 50,
@@ -485,7 +485,7 @@ function buildBotSubmission(game, seat) {
   if (enemyTargets.length) {
     const targetStrikeTarget = randomTarget();
     tryAdd({
-      type: "Target Strike",
+      type: "Targeted Strike",
       targetSeat: targetStrikeTarget?.targetSeat ?? null,
       targetTower: targetStrikeTarget?.targetTower ?? "",
       guess: sample(CHARACTER_POOL) || "",
@@ -586,15 +586,15 @@ function validateSubmission(game, nation, treaty, decision, actions) {
       throw new Error("Interception is disabled in 2-player matches.");
     }
 
-    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "HP Check", "Move Check", "Interception"].includes(action.type)) {
+    if (["Strike", "Targeted Strike", "Siege Operation", "Coordinated Assault", "Deep Surveillance", "HP Check", "Move Check", "Interception"].includes(action.type)) {
       requireEnemySeat(action.targetSeat, action.type);
     }
 
-    if (["Strike", "Target Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance", "HP Check"].includes(action.type) && !validTower(action.targetTower)) {
+    if (["Strike", "Targeted Strike", "Siege Operation", "Coordinated Assault", "Fortify", "Repair", "Evacuation", "Sabotage", "Deep Surveillance", "HP Check"].includes(action.type) && !validTower(action.targetTower)) {
       throw new Error(`${action.type} needs a valid tower.`);
     }
 
-    if (["Target Strike", "Siege Operation"].includes(action.type) && !validCharacter(action.guess)) {
+    if (["Targeted Strike", "Siege Operation"].includes(action.type) && !validCharacter(action.guess)) {
       throw new Error(`${action.type} needs a valid character guess.`);
     }
 
@@ -976,7 +976,7 @@ function calculateDamage(game, action, attacker, defender, resolution) {
   const priority = resolution.priorityTargets[attacker.seat];
   const priorityBonus = priority && priority.targetSeat === defender.seat && priority.targetTower === action.targetTower ? 15 : 0;
   if (action.type === "Strike") return 30 + priorityBonus;
-  if (action.type === "Target Strike") return (guessedCorrectly ? 80 : 40) + priorityBonus;
+  if (action.type === "Targeted Strike") return (guessedCorrectly ? 80 : 40) + priorityBonus;
   if (action.type === "Queued Siege") return (guessedCorrectly ? 160 : 120) + priorityBonus;
   if (action.type === "Coordinated Assault") {
     const attackedLastRound = (game.previousAttackTargets[attacker.seat] || []).includes(`${defender.seat}:${action.targetTower}`);
