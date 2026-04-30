@@ -29,7 +29,10 @@
           <span>Lobby</span>
           <strong id="hero-lobby">None</strong>
         </div>
-        <button id="move-guide-button" class="secondary-button" type="button">Move Guide</button>
+        <div class="inline-actions">
+          <button id="move-guide-button" class="secondary-button" type="button">Move Guide</button>
+          <button id="hero-settings-button" class="secondary-button settings-button" type="button" aria-label="Settings">⚙</button>
+        </div>
       </div>
     </header>
 
@@ -104,8 +107,7 @@
             <h2 id="turn-heading">Current Day</h2>
           </div>
           <div class="inline-actions">
-            <button id="forfeit-button" class="secondary-button" type="button">Forfeit Match</button>
-            <button id="leave-match-button" class="secondary-button hidden" type="button">Leave Match</button>
+            <button id="game-settings-button" class="secondary-button settings-button" type="button" aria-label="Settings">⚙</button>
             <button id="submit-turn-button" class="primary-button" type="button">Submit Turn</button>
           </div>
         </div>
@@ -161,12 +163,31 @@
     <div class="modal-card">
       <div class="panel-heading">
         <div>
-          <p class="section-kicker">Reference</p>
-          <h2>Move Guide</h2>
+          <p id="reference-kicker" class="section-kicker">Reference</p>
+          <h2 id="reference-title">Move Guide</h2>
         </div>
         <button id="move-guide-dismiss" class="secondary-button" type="button">Close</button>
       </div>
       <div id="move-guide-content" class="move-guide-content"></div>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" id="settings-close"></div>
+    <div class="modal-card settings-card">
+      <div class="panel-heading">
+        <div>
+          <p class="section-kicker">Settings</p>
+          <h2>War Room Menu</h2>
+        </div>
+      </div>
+      <div class="settings-menu">
+        <button id="settings-return-button" class="secondary-button settings-menu-button" type="button">Return</button>
+        <button id="settings-tower-guide-button" class="secondary-button settings-menu-button" type="button">Tower Guide</button>
+        <button id="settings-move-guide-button" class="secondary-button settings-menu-button" type="button">Move Guide</button>
+        <button id="settings-rules-button" class="secondary-button settings-menu-button" type="button">Rules</button>
+        <button id="settings-exit-button" class="secondary-button settings-menu-button settings-menu-button-danger" type="button">Forfeit</button>
+      </div>
     </div>
   </div>
 
