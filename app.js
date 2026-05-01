@@ -168,18 +168,31 @@ function clearTooltip() {
   state.turnUi.tooltip = null;
 }
 
-function renderMoveTooltip(snapshot) {
+function ensureMoveTooltipHost() {
+  let host = document.getElementById("move-tooltip-host");
+  if (host) return host;
+  host = document.createElement("div");
+  host.id = "move-tooltip-host";
+  document.body.appendChild(host);
+  return host;
+}
+
+function updateMoveTooltip(snapshot) {
+  const host = ensureMoveTooltipHost();
   const tooltip = state.turnUi.tooltip;
-  if (!tooltip || tooltip.kind !== "move" || !tooltip.move) return "";
+  if (!tooltip || tooltip.kind !== "move" || !tooltip.move) {
+    host.innerHTML = "";
+    return;
+  }
   const move = tooltip.move;
   const cost = MOVE_COSTS[move];
   const description = moveDescriptions[move] || "";
   const costLabel = typeof cost === "number" ? (cost === 0 ? "Free" : `${cost}g`) : "";
-  const widthClamp = 340;
-  const heightClamp = 220;
+  const widthClamp = 360;
+  const heightClamp = 260;
   const left = Math.max(4, Math.min((tooltip.x || 0), window.innerWidth - widthClamp - 4));
   const top = Math.max(4, Math.min((tooltip.y || 0), window.innerHeight - heightClamp - 4));
-  return `
+  host.innerHTML = `
     <div class="move-tooltip" style="left:${left}px;top:${top}px;">
       <div class="move-tooltip-head">
         <strong class="move-tooltip-title">${move}</strong>
@@ -1218,7 +1231,6 @@ function renderGame(snapshot) {
             </div>
           </div>
         </div>
-        ${renderMoveTooltip(snapshot)}
       </div>
 
       <div class="arena-workspace">
@@ -1249,6 +1261,7 @@ function renderGame(snapshot) {
   `;
 
   bindArenaEvents(snapshot, turnLocked);
+  updateMoveTooltip(snapshot);
 }
 
 function bindArenaEvents(snapshot, turnLocked) {
@@ -1286,41 +1299,41 @@ function bindArenaEvents(snapshot, turnLocked) {
     button.addEventListener("mouseenter", (event) => {
       if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
         setMoveTooltip(button.dataset.move, event);
-        renderGame(snapshot);
+        updateMoveTooltip(snapshot);
       }
     });
     button.addEventListener("pointerenter", (event) => {
       if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
         setMoveTooltip(button.dataset.move, event);
-        renderGame(snapshot);
+        updateMoveTooltip(snapshot);
       }
     });
     button.addEventListener("mousemove", (event) => {
       if (state.turnUi.tooltip?.kind === "move" && state.turnUi.tooltip?.move === button.dataset.move) {
         setMoveTooltip(button.dataset.move, event);
-        renderGame(snapshot);
+        updateMoveTooltip(snapshot);
       }
     });
     button.addEventListener("mouseleave", () => {
       if (state.turnUi.tooltip?.kind === "move") {
         clearTooltip();
-        renderGame(snapshot);
+        updateMoveTooltip(snapshot);
       }
     });
     button.addEventListener("pointerleave", () => {
       if (state.turnUi.tooltip?.kind === "move") {
         clearTooltip();
-        renderGame(snapshot);
+        updateMoveTooltip(snapshot);
       }
     });
     button.addEventListener("focus", (event) => {
       setMoveTooltip(button.dataset.move, event);
-      renderGame(snapshot);
+      updateMoveTooltip(snapshot);
     });
     button.addEventListener("blur", () => {
       if (state.turnUi.tooltip?.kind === "move") {
         clearTooltip();
-        renderGame(snapshot);
+        updateMoveTooltip(snapshot);
       }
     });
   });
@@ -2636,7 +2649,7 @@ document.addEventListener("pointermove", (event) => {
   const overMove = Boolean(elAtPointer?.closest?.("[data-move]"));
   if (!overMove) {
     clearTooltip();
-    renderGame(state.snapshot);
+    updateMoveTooltip(state.snapshot);
   }
 });
 
