@@ -8,6 +8,7 @@ const state = {
   pendingSnapshot: null,
   suppressRenderWhileEditing: false,
   returnReferenceToSettings: false,
+  chatWidgetOpen: false,
   setupDraft: {
     Parliament: "",
     Base: "",
@@ -148,7 +149,59 @@ function resetTurnUi() {
     selectedCategory: "attack",
     pending: null,
     popup: null,
+    tooltip: null,
   };
+}
+
+function setMoveTooltip(move, event) {
+  const clientX = event?.clientX ?? 0;
+  const clientY = event?.clientY ?? 0;
+  state.turnUi.tooltip = {
+    kind: "move",
+    move,
+    x: clientX,
+    y: clientY,
+  };
+}
+
+function clearTooltip() {
+  state.turnUi.tooltip = null;
+}
+
+function ensureMoveTooltipHost() {
+  let host = document.getElementById("move-tooltip-host");
+  if (host) return host;
+  host = document.createElement("div");
+  host.id = "move-tooltip-host";
+  document.body.appendChild(host);
+  return host;
+}
+
+function updateMoveTooltip(snapshot) {
+  const host = ensureMoveTooltipHost();
+  const tooltip = state.turnUi.tooltip;
+  if (!tooltip || tooltip.kind !== "move" || !tooltip.move) {
+    host.innerHTML = "";
+    return;
+  }
+  const move = tooltip.move;
+  const cost = MOVE_COSTS[move];
+  const description = moveDescriptions[move] || "";
+  const costLabel = typeof cost === "number" ? (cost === 0 ? "Free" : `${cost}g`) : "";
+  const widthClamp = 360;
+  const heightClamp = 260;
+  const left = Math.max(4, Math.min((tooltip.x || 0), window.innerWidth - widthClamp - 4));
+  const top = Math.max(4, Math.min((tooltip.y || 0), window.innerHeight - heightClamp - 4));
+  host.innerHTML = `
+    <div class="move-tooltip" style="left:${left}px;top:${top}px;">
+      <div class="move-tooltip-head">
+        <strong class="move-tooltip-title">${move}</strong>
+        <span class="move-tooltip-cost">${costLabel}</span>
+      </div>
+      <p class="move-tooltip-body meta-text">${description}</p>
+      <p class="move-tooltip-hint">Hover moves to preview.</p>
+    </div>
+  `;
 }
 
 const moveDescriptions = {
@@ -264,9 +317,6 @@ const el = {
   submitTurnButton: document.getElementById("submit-turn-button"),
   logTabs: document.getElementById("log-tabs"),
   globalLog: document.getElementById("global-log"),
-  chatLog: document.getElementById("chat-log"),
-  chatInput: document.getElementById("chat-input"),
-  chatSendButton: document.getElementById("chat-send-button"),
   moveGuideButton: document.getElementById("move-guide-button"),
   moveGuideModal: document.getElementById("move-guide-modal"),
   moveGuideClose: document.getElementById("move-guide-close"),
@@ -959,7 +1009,7 @@ function renderMoveTray(snapshot, turnLocked) {
           || (category !== "decision" && isMoveAlreadyUsed(snapshot, move));
         const selected = (category === "decision" && state.turnDraft.decision.type === move) || activeMove === move;
         return `
-          <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" title="${moveDescriptions[move] || ""}" ${disabled ? "disabled" : ""}>
+          <button type="button" class="move-chip ${selected ? "is-selected" : ""}" data-move="${move}" ${disabled ? "disabled" : ""}>
             <span>${getMoveDisplayName(move)}</span>
             <strong>${MOVE_COSTS[move] === 0 ? "Free" : `${MOVE_COSTS[move]}g`}</strong>
           </button>
@@ -1145,7 +1195,7 @@ function renderGame(snapshot) {
         </div>
       </div>
 
-      <div class="arena-command-deck">
+      <div class="arena-command-deck ${state.chatWidgetOpen ? "chat-open" : "chat-closed"}">
         <header class="arena-command-deck-head">
           <div>
             <p class="war-panel-kicker">War room</p>
@@ -1159,6 +1209,27 @@ function renderGame(snapshot) {
           <button type="button" class="secondary-button command-bar-btn" data-cancel-selection="1" ${state.turnUi.pending || state.turnUi.popup ? "" : "disabled"}>Cancel Selection</button>
           ${snapshot.game.finished ? '<button type="button" class="secondary-button command-bar-btn" data-leave-match="1">Leave Match</button>' : ""}
           <button type="button" class="primary-button command-bar-btn command-bar-submit" data-submit-turn="1" ${turnLocked || snapshot.game.finished ? "disabled" : ""}>${snapshot.game.finished ? "Match Complete" : turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
+        </div>
+
+        <div class="chat-widget ${state.chatWidgetOpen ? "is-open" : "is-closed"}">
+          <button type="button" class="chat-widget-fab" data-chat-toggle="1" aria-expanded="${state.chatWidgetOpen ? "true" : "false"}">
+            <span class="chat-widget-fab-label">Chat</span>
+            <strong class="chat-widget-fab-count">${(snapshot.chat || []).length ? (snapshot.chat || []).length : ""}</strong>
+          </button>
+          <div class="chat-widget-panel" ${state.chatWidgetOpen ? "" : "hidden"}>
+            <div class="chat-widget-head">
+              <div>
+                <p class="war-panel-kicker">Commander channel</p>
+                <h3>Lobby chat</h3>
+              </div>
+              <button type="button" class="secondary-button chat-widget-close" data-chat-toggle="1">Close</button>
+            </div>
+            <div id="chat-log" class="chat-log chat-widget-log"></div>
+            <div class="chat-compose chat-widget-compose">
+              <input id="chat-input" data-chat-input="1" placeholder="Type a message" autocomplete="off">
+              <button id="chat-send-button" data-chat-send="1" class="primary-button" type="button">Send</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1190,6 +1261,7 @@ function renderGame(snapshot) {
   `;
 
   bindArenaEvents(snapshot, turnLocked);
+  updateMoveTooltip(snapshot);
 }
 
 function bindArenaEvents(snapshot, turnLocked) {
@@ -1223,6 +1295,46 @@ function bindArenaEvents(snapshot, turnLocked) {
       if (state.turnUi.popup) return;
       if (!tutorialAllows("move", button.dataset.move)) return;
       handleMoveSelection(snapshot, button.dataset.move);
+    });
+    button.addEventListener("mouseenter", (event) => {
+      if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
+        setMoveTooltip(button.dataset.move, event);
+        updateMoveTooltip(snapshot);
+      }
+    });
+    button.addEventListener("pointerenter", (event) => {
+      if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
+        setMoveTooltip(button.dataset.move, event);
+        updateMoveTooltip(snapshot);
+      }
+    });
+    button.addEventListener("mousemove", (event) => {
+      if (state.turnUi.tooltip?.kind === "move" && state.turnUi.tooltip?.move === button.dataset.move) {
+        setMoveTooltip(button.dataset.move, event);
+        updateMoveTooltip(snapshot);
+      }
+    });
+    button.addEventListener("mouseleave", () => {
+      if (state.turnUi.tooltip?.kind === "move") {
+        clearTooltip();
+        updateMoveTooltip(snapshot);
+      }
+    });
+    button.addEventListener("pointerleave", () => {
+      if (state.turnUi.tooltip?.kind === "move") {
+        clearTooltip();
+        updateMoveTooltip(snapshot);
+      }
+    });
+    button.addEventListener("focus", (event) => {
+      setMoveTooltip(button.dataset.move, event);
+      updateMoveTooltip(snapshot);
+    });
+    button.addEventListener("blur", () => {
+      if (state.turnUi.tooltip?.kind === "move") {
+        clearTooltip();
+        updateMoveTooltip(snapshot);
+      }
     });
   });
   el.playerForm.querySelectorAll("[data-tower-seat]").forEach((button) => {
@@ -1307,6 +1419,28 @@ function bindArenaEvents(snapshot, turnLocked) {
       state.turnUi.pending = null;
       state.turnUi.popup = null;
       renderGame(snapshot);
+    });
+  });
+
+  el.playerForm.querySelectorAll("[data-chat-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.chatWidgetOpen = !state.chatWidgetOpen;
+      renderGame(snapshot);
+      renderChat(snapshot);
+      if (state.chatWidgetOpen) {
+        window.setTimeout(() => document.getElementById("chat-input")?.focus(), 0);
+      }
+    });
+  });
+  el.playerForm.querySelectorAll("[data-chat-send]").forEach((button) => {
+    button.addEventListener("click", () => sendChat().catch((error) => window.alert(error.message)));
+  });
+  el.playerForm.querySelectorAll("[data-chat-input]").forEach((input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        sendChat().catch((error) => window.alert(error.message));
+      }
     });
   });
   if (turnLocked) {
@@ -1727,7 +1861,9 @@ function renderLogs(snapshot) {
 
 function renderChat(snapshot) {
   const chat = snapshot.chat || [];
-  el.chatLog.innerHTML = chat.length
+  const chatLog = document.getElementById("chat-log");
+  if (!chatLog) return;
+  chatLog.innerHTML = chat.length
     ? chat.map((message) => `
       <div class="chat-message ${message.seat === snapshot.game.playerSeat ? "is-self" : ""}">
         <strong>${message.displayName}</strong>
@@ -1735,7 +1871,7 @@ function renderChat(snapshot) {
       </div>
     `).join("")
     : `<div class="log-entry">No messages yet.</div>`;
-  el.chatLog.scrollTop = el.chatLog.scrollHeight;
+  chatLog.scrollTop = chatLog.scrollHeight;
 }
 
 function render() {
@@ -1966,7 +2102,8 @@ async function submitTurn() {
 }
 
 async function sendChat() {
-  const text = (el.chatInput.value || "").trim();
+  const chatInput = document.getElementById("chat-input");
+  const text = (chatInput?.value || "").trim();
   if (!text) return;
   const snapshot = await api("/api/chat", {
     method: "POST",
@@ -1976,7 +2113,7 @@ async function sendChat() {
       text,
     },
   });
-  el.chatInput.value = "";
+  if (chatInput) chatInput.value = "";
   applySnapshot(snapshot);
 }
 
@@ -2486,13 +2623,6 @@ el.practiceTutorialButton.addEventListener("click", () => startPractice("tutoria
 el.practiceRegularButton.addEventListener("click", () => startPractice("regular").catch((error) => window.alert(error.message)));
 el.tutorialNextButton.addEventListener("click", advanceTutorial);
 el.warPhasePopupButton.addEventListener("click", dismissWarPhasePopup);
-el.chatSendButton.addEventListener("click", () => sendChat().catch((error) => window.alert(error.message)));
-el.chatInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    sendChat().catch((error) => window.alert(error.message));
-  }
-});
 
 renderMoveGuide();
 
@@ -2503,6 +2633,24 @@ window.addEventListener("resize", () => {
   arenaResizeReflowTimer = window.setTimeout(() => {
     if (!state.suppressRenderWhileEditing) render();
   }, 120);
+});
+
+// Tooltips are rendered from state; because the arena UI re-renders frequently,
+// per-element mouseleave can be missed. Clear move tooltips when the pointer is not
+// currently over a move chip.
+document.addEventListener("pointermove", (event) => {
+  if (!state.snapshot?.game?.started) return;
+  if (state.suppressRenderWhileEditing) return;
+  if (!state.turnUi?.tooltip || state.turnUi.tooltip.kind !== "move") return;
+  if (event.pointerType && event.pointerType !== "mouse") return;
+  const x = event.clientX ?? 0;
+  const y = event.clientY ?? 0;
+  const elAtPointer = document.elementFromPoint(x, y);
+  const overMove = Boolean(elAtPointer?.closest?.("[data-move]"));
+  if (!overMove) {
+    clearTooltip();
+    updateMoveTooltip(state.snapshot);
+  }
 });
 
 document.addEventListener("keydown", (event) => {
