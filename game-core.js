@@ -301,6 +301,25 @@ function decisionCost(type) {
   return table[type] || 0;
 }
 
+function canonicalMoveType(type) {
+  return type === "Target Strike" ? "Targeted Strike" : type;
+}
+
+function normalizeDecision(decision) {
+  if (!decision) return null;
+  return {
+    ...decision,
+    payload: decision.type === "Leader's Intervention" ? canonicalMoveType(decision.payload) : decision.payload,
+  };
+}
+
+function normalizeActions(actions) {
+  return (actions || []).map((action) => ({
+    ...action,
+    type: canonicalMoveType(action?.type),
+  }));
+}
+
 function normalizeDecisionGuesses(decision) {
   if (Array.isArray(decision?.guess)) {
     return decision.guess;
@@ -406,8 +425,8 @@ function submitTurn(game, seat, submission) {
     throw new Error("Turn already submitted.");
   }
 
-  const decision = submission.decision || null;
-  const actions = Array.isArray(submission.actions) ? submission.actions : [];
+  const decision = normalizeDecision(submission.decision || null);
+  const actions = normalizeActions(Array.isArray(submission.actions) ? submission.actions : []);
   const allowedActions = activeActionLimit(nation, decision);
   if (actions.length > allowedActions) {
     throw new Error("Too many actions submitted.");
@@ -566,7 +585,7 @@ function validateSubmission(game, nation, treaty, decision, actions) {
     }
   }
 
-  if (!nation.totalMobilization) {
+  if (!nation.totalMobilization && decision?.type !== "Total Mobilization") {
     const seen = new Set();
     for (const action of actions) {
       if (!action?.type) continue;
@@ -700,6 +719,7 @@ function resolveDay(game) {
   resolveNationalDecisions(game, submissions, resolution);
   gatherActions(game, submissions, resolution);
   resolveAttacks(game, resolution);
+  finalizeCounterResults(resolution);
   resolveIntel(game, submissions, resolution);
   decayTreaties(game);
   scoreDay(game, resolution, resolvingDay);
@@ -921,8 +941,7 @@ function queueDefense(game, action, resolution) {
     addPlayerResult(resolution, action.seat, "jamming", "Successful", "Interception");
   }
   if (action.type === "Counter") {
-    resolution.counters[action.seat] = true;
-    addPlayerResult(resolution, action.seat, "jamming", "Successful", "Counter");
+    resolution.counters[action.seat] = { active: true, triggered: false };
   }
 }
 
@@ -1008,8 +1027,9 @@ function resolveAttacks(game, resolution) {
       addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Intercepted${formatActionGuessSuffix(action)}`, action.type);
       return;
     }
-    if (resolution.counters[defender.seat]) {
-      resolution.counters[defender.seat] = false;
+    if (resolution.counters[defender.seat]?.active) {
+      resolution.counters[defender.seat].active = false;
+      resolution.counters[defender.seat].triggered = true;
       const rebound = attacker.towers[action.targetTower].hp > 0 ? action.targetTower : lowestAliveTower(attacker);
       if (rebound) applyDamage(game, resolution, defender.seat, attacker.seat, rebound, 60, "Counter");
       addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}: Countered${formatActionGuessSuffix(action)}`, action.type);
@@ -1027,6 +1047,18 @@ function resolveAttacks(game, resolution) {
     } else {
       addPlayerResult(resolution, attacker.seat, "attack", `Failure on ${defender.nationName} ${action.targetTower}${formatActionGuessSuffix(action)}`, action.type);
     }
+  });
+}
+
+function finalizeCounterResults(resolution) {
+  Object.entries(resolution.counters).forEach(([seat, counter]) => {
+    addPlayerResult(
+      resolution,
+      Number(seat),
+      "jamming",
+      counter?.triggered ? "Successful" : "Failure: No target",
+      "Counter"
+    );
   });
 }
 
