@@ -1,0 +1,17 @@
+{
+  "name": "art-of-war-functions",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "index.js",
+  "scripts": {
+    "sync-core": "node copy-game-core.cjs",
+    "prepare": "node copy-game-core.cjs"
+  },
+  "dependencies": {
+    "firebase-admin": "latest",
+    "firebase-functions": "latest"
+  }
+}
+
