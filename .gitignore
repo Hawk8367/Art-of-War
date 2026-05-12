@@ -1,3 +1,6 @@
+# Generated copy for Cloud Functions bundle (see functions/copy-game-core.cjs)
+functions/game-core.js
+
 # Dependencies
 node_modules/
 
@@ -12,9 +15,21 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Environment
+# Environment & secrets (never commit real values)
 .env
 .env.*.local
+*.pem
+*.p12
+
+# Firebase / GCP credentials & local config that can hold secrets
+.firebase/
+*-firebase-adminsdk-*.json
+firebase-adminsdk-*.json
+**/serviceAccount*.json
+serviceAccountKey.json
+gcloud-service-key*.json
+.runtimeconfig.json
+.runtimeconfig.*.json
 
 # OS junk
 .DS_Store
