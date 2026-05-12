@@ -421,6 +421,9 @@ function submitTurn(game, seat, submission) {
   if (!game.started || game.finished) {
     throw new Error("Game is not accepting turns.");
   }
+  if (totalHealth(nation) <= 0) {
+    throw new Error("Eliminated nations cannot submit turns.");
+  }
   if (nation.lastSubmittedDay === game.day) {
     throw new Error("Turn already submitted.");
   }
@@ -452,6 +455,9 @@ function submitTurn(game, seat, submission) {
 function buildBotSubmission(game, seat) {
   const nation = getNation(game, seat);
   if (!nation || !nation.ready || nation.lastSubmittedDay === game.day || game.finished) {
+    return null;
+  }
+  if (totalHealth(nation) <= 0) {
     return null;
   }
 
@@ -641,7 +647,9 @@ function validateSubmission(game, nation, treaty, decision, actions) {
 }
 
 function everyoneSubmitted(game) {
-  return game.players.every((player) => player.lastSubmittedDay === game.day);
+  return game.players.every(
+    (player) => totalHealth(player) <= 0 || player.lastSubmittedDay === game.day,
+  );
 }
 
 function addPlayerResult(resolution, seat, category, text, label) {
@@ -685,7 +693,15 @@ function compareDayRanking(a, b, resolution) {
 
 function resolveDay(game) {
   const resolvingDay = game.day;
-  const submissions = game.players.map((player) => player.pendingTurn);
+  const submissions = game.players.map((player) => (
+    player.pendingTurn ?? {
+      seat: player.seat,
+      decision: null,
+      treaty: null,
+      treatyResponses: [],
+      actions: [],
+    }
+  ));
   const resolution = {
     dayStartHealth: {},
     attacks: [],
@@ -754,6 +770,7 @@ function resolveTreaties(game, submissions) {
     return;
   }
   submissions.forEach((entry) => {
+    if (!entry) return;
     (entry.treatyResponses || []).forEach((response) => {
       const offer = game.pendingTreatyOffers.find((candidate) => candidate.id === response.offerId);
       if (!offer) return;
@@ -770,6 +787,7 @@ function resolveTreaties(game, submissions) {
   });
 
   submissions.forEach((entry) => {
+    if (!entry) return;
     const proposal = entry.treaty;
     if (!proposal) return;
     const nation = getNation(game, entry.seat);
@@ -789,6 +807,7 @@ function resolveTreaties(game, submissions) {
 
 function resolveNationalDecisions(game, submissions, resolution) {
   submissions.forEach((entry) => {
+    if (!entry) return;
     const decision = entry.decision;
     if (!decision) return;
     const nation = getNation(game, entry.seat);
@@ -855,6 +874,7 @@ function filterRepeated(gamePlayer, actions) {
 
 function gatherActions(game, submissions, resolution) {
   submissions.forEach((entry) => {
+    if (!entry) return;
     const nation = getNation(game, entry.seat);
     const actions = filterRepeated(nation, entry.actions || []);
     actions.forEach((action) => {
@@ -1119,8 +1139,8 @@ function resolveIntel(game, submissions, resolution) {
       addPlayerResult(resolution, source.seat, "intel", `Successful on ${action.targetTower}: ${target.towers[action.targetTower].hp} HP`, "HP Check");
     }
     if (action.type === "Move Check") {
-      const submission = submissions.find((entry) => entry.seat === target.seat);
-      const visibleMoves = (submission.actions || []).map((move) => move.type).join(", ") || "No actions";
+      const submission = submissions.find((entry) => entry && entry.seat === target.seat);
+      const visibleMoves = ((submission && submission.actions) || []).map((move) => move.type).join(", ") || "No actions";
       addPlayerResult(resolution, source.seat, "intel", `Successful: ${visibleMoves}`, "Move Check");
     }
   });
@@ -1251,4 +1271,5 @@ module.exports = {
   buildBotSubmission,
   everyoneSubmitted,
   resolveDay,
+  totalHealth,
 };

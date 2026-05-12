@@ -748,6 +748,10 @@ function getDamageMarker(snapshot, seat, towerName) {
 }
 
 function getPendingInstruction(snapshot) {
+  const you = snapshot.game.you;
+  if (getTowerTotalHp(you.towers) <= 0 && !snapshot.game.finished) {
+    return "All your towers are destroyed. You are eliminated and cannot issue new orders while the match continues.";
+  }
   if (state.turnUi.popup?.type === "intervention") {
     return "Leader's Intervention selected. Choose one nation and the move you want to block.";
   }
@@ -1165,6 +1169,8 @@ function renderGame(snapshot) {
   }
   const gridArena = shouldUseGridArena(snapshot);
   const turnLocked = you.lastSubmittedDay === snapshot.game.displayDay;
+  const youEliminated = getTowerTotalHp(you.towers) <= 0;
+  const inputsLocked = turnLocked || youEliminated || snapshot.game.finished;
   el.turnHeading.textContent = `Day ${snapshot.game.displayDay} - ${you.nationName}`;
   const winnerName = snapshot.game.finished && snapshot.game.winnerSeat !== null ? getCommanderName(snapshot, snapshot.game.winnerSeat) : "";
   const winReason = snapshot.game.winReason === "forfeit"
@@ -1179,7 +1185,7 @@ function renderGame(snapshot) {
 
   el.playerForm.className = "arena-shell";
   el.playerForm.innerHTML = `
-    <section class="arena-board ${turnLocked ? "submitted-card" : ""}">
+    <section class="arena-board ${inputsLocked ? "submitted-card" : ""}">
       <div class="arena-hud">
         <div class="arena-stat left">
           <span>Points | Gold</span>
@@ -1203,12 +1209,12 @@ function renderGame(snapshot) {
           </div>
           <p class="arena-command-deck-hint meta-text">Choose a category, queue moves on the board, then submit.</p>
         </header>
-        ${renderCategoryDock(snapshot, turnLocked)}
-        ${renderMoveTray(snapshot, turnLocked)}
+        ${renderCategoryDock(snapshot, inputsLocked)}
+        ${renderMoveTray(snapshot, inputsLocked)}
         <div class="command-actions command-actions-bar">
           <button type="button" class="secondary-button command-bar-btn" data-cancel-selection="1" ${state.turnUi.pending || state.turnUi.popup ? "" : "disabled"}>Cancel Selection</button>
           ${snapshot.game.finished ? '<button type="button" class="secondary-button command-bar-btn" data-leave-match="1">Leave Match</button>' : ""}
-          <button type="button" class="primary-button command-bar-btn command-bar-submit" data-submit-turn="1" ${turnLocked || snapshot.game.finished ? "disabled" : ""}>${snapshot.game.finished ? "Match Complete" : turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
+          <button type="button" class="primary-button command-bar-btn command-bar-submit" data-submit-turn="1" ${inputsLocked ? "disabled" : ""}>${snapshot.game.finished ? "Match Complete" : youEliminated ? "Eliminated" : turnLocked ? "Turn Submitted" : "Submit Turn"}</button>
         </div>
 
         <div class="chat-widget ${state.chatWidgetOpen ? "is-open" : "is-closed"}">
@@ -1238,7 +1244,7 @@ function renderGame(snapshot) {
           ${renderArena(snapshot, gridArena)}
         </div>
         <aside class="arena-side">
-          ${renderDecisionPanel(snapshot, turnLocked)}
+          ${renderDecisionPanel(snapshot, inputsLocked)}
           <div class="arena-sidecard war-panel arena-queue-card">
             <div class="sidecard-header war-panel-header">
               <div>
@@ -1247,20 +1253,20 @@ function renderGame(snapshot) {
               </div>
               <span class="meta-text war-panel-badge">${getRemainingActionCount(snapshot)} left</span>
             </div>
-            ${renderOrdersQueue(snapshot, turnLocked)}
+            ${renderOrdersQueue(snapshot, inputsLocked)}
           </div>
         </aside>
       </div>
 
       <div class="arena-treaties-row ${snapshot.game.playerCount === 2 ? "hidden" : ""}">
-        ${renderTreatiesPanel(snapshot, turnLocked)}
+        ${renderTreatiesPanel(snapshot, inputsLocked)}
       </div>
 
       ${renderPopup(snapshot)}
     </section>
   `;
 
-  bindArenaEvents(snapshot, turnLocked);
+  bindArenaEvents(snapshot, inputsLocked);
   updateMoveTooltip(snapshot);
 }
 
@@ -2081,6 +2087,11 @@ async function readyUp() {
 
 async function submitTurn() {
   if (!tutorialAllows("submit-turn")) return;
+  const you = state.snapshot?.game?.you;
+  if (you && getTowerTotalHp(you.towers) <= 0) {
+    window.alert("Your nation has been eliminated and cannot submit turns.");
+    return;
+  }
   const confirmed = window.confirm("Submit this turn?");
   if (!confirmed) return;
   const snapshot = await api("/api/submit", {

@@ -52,6 +52,26 @@ function resolveSubmittedDay(game, ...submissions) {
 }
 
 describe("game-core rules", () => {
+  it("eliminated nations cannot submit turns", () => {
+    const game = setupTwoPlayerGame();
+    game.players[0].towers.Parliament.hp = 0;
+    game.players[0].towers.Base.hp = 0;
+    game.players[0].towers.Office.hp = 0;
+    expect(() => submitTurn(game, 0, { actions: [] })).toThrow(/Eliminated nations cannot submit turns/);
+  });
+
+  it("eliminated players are skipped for day lock so others can resolve", () => {
+    const game = setupTwoPlayerGame();
+    game.players[0].towers.Parliament.hp = 0;
+    game.players[0].towers.Base.hp = 0;
+    game.players[0].towers.Office.hp = 0;
+    submitTurn(game, 1, { actions: [] });
+    expect(everyoneSubmitted(game)).toBe(true);
+    resolveDay(game);
+    expect(game.day).toBe(2);
+    expect(game.finished).toBe(false);
+  });
+
   it("repair restores HP during the defense phase", () => {
     const game = setupTwoPlayerGame();
     game.players[0].towers.Parliament.hp = 130;

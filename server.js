@@ -22,6 +22,7 @@ const {
   everyoneSubmitted,
   resolveDay,
   forfeitGame,
+  totalHealth,
 } = require("./game-core");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -100,7 +101,11 @@ function autoSubmitBots(lobby) {
 function allHumansSubmitted(lobby) {
   return lobby.players
     .filter((player) => !player.isBot)
-    .every((player) => getNation(lobby.game, player.seat)?.lastSubmittedDay === lobby.game.day);
+    .every((player) => {
+      const nation = getNation(lobby.game, player.seat);
+      if (!nation) return false;
+      return totalHealth(nation) <= 0 || nation.lastSubmittedDay === lobby.game.day;
+    });
 }
 
 function serveStatic(req, res, pathname) {
