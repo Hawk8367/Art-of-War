@@ -61,11 +61,12 @@ describe("game-core rules", () => {
   });
 
   it("eliminated players are skipped for day lock so others can resolve", () => {
-    const game = setupTwoPlayerGame();
+    const game = setupThreePlayerGame();
     game.players[0].towers.Parliament.hp = 0;
     game.players[0].towers.Base.hp = 0;
     game.players[0].towers.Office.hp = 0;
     submitTurn(game, 1, { actions: [] });
+    submitTurn(game, 2, { actions: [] });
     expect(everyoneSubmitted(game)).toBe(true);
     resolveDay(game);
     expect(game.day).toBe(2);
