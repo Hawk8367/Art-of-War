@@ -29,7 +29,12 @@
           <span>Lobby</span>
           <strong id="hero-lobby">None</strong>
         </div>
+        <div class="hero-stat">
+          <span>Account</span>
+          <strong id="hero-account">Signed out</strong>
+        </div>
         <div class="inline-actions">
+          <button id="auth-button" class="secondary-button" type="button">Sign in</button>
           <button id="move-guide-button" class="secondary-button" type="button">Move Guide</button>
           <button id="hero-settings-button" class="secondary-button settings-button" type="button" aria-label="Settings">⚙</button>
         </div>
@@ -212,6 +217,10 @@
       <button id="war-phase-popup-button" class="primary-button" type="button">Proceed to next war phase</button>
     </div>
   </div>
+
+  <!-- Firebase (compat builds keep app.js non-module) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 
   <script src="app.js"></script>
 </body>

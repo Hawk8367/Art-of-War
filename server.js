@@ -131,6 +131,12 @@ const server = http.createServer(async (req, res) => {
   const pathname = url.pathname;
 
   try {
+    if (req.method === "GET" && pathname === "/favicon.ico") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
     if (req.method === "POST" && pathname === "/api/lobbies") {
       const body = await readBody(req);
       const requestedPlayerCount = Number(body.playerCount || 4);

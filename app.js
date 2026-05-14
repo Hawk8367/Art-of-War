@@ -289,6 +289,8 @@ const el = {
   heroPanel: document.getElementById("hero-panel"),
   heroStatus: document.getElementById("hero-status"),
   heroLobby: document.getElementById("hero-lobby"),
+  heroAccount: document.getElementById("hero-account"),
+  authButton: document.getElementById("auth-button"),
   heroSettingsButton: document.getElementById("hero-settings-button"),
   landingPanel: document.getElementById("landing-panel"),
   lobbyPanel: document.getElementById("lobby-panel"),
@@ -344,6 +346,103 @@ const el = {
   warPhasePopupText: document.getElementById("war-phase-popup-text"),
   warPhasePopupButton: document.getElementById("war-phase-popup-button"),
 };
+
+// ---------------------------
+// Firebase Auth (Google)
+// ---------------------------
+
+// IMPORTANT: Fill these in from Firebase Console → Project settings → Your apps → Web app.
+// This is safe to be public (it's not a secret), but it must match your Firebase project.
+const FIREBASE_CONFIG = window.FIREBASE_CONFIG || {
+  apiKey: "AIzaSyDdsRFh1zZlyqGGZUF_yfYXvFXLuaotNlI",
+  authDomain: "art-of-war-ad70e.firebaseapp.com",
+  projectId: "art-of-war-ad70e",
+  storageBucket: "art-of-war-ad70e.firebasestorage.app",
+  messagingSenderId: "1055483414965",
+  appId: "1:1055483414965:web:387f3b098764b7e10bb1fc",
+  measurementId: "G-99B62SBN5X",
+};
+
+let firebaseApp = null;
+let firebaseAuth = null;
+let authUser = null;
+let authToken = "";
+let firebaseAuthBusy = false;
+
+function hasFirebaseConfig(config) {
+  return Boolean(config && config.apiKey && config.authDomain && config.projectId && config.appId && !String(config.apiKey).includes("REPLACE_ME"));
+}
+
+function initFirebase() {
+  if (!window.firebase || !window.firebase.initializeApp) return;
+  if (!hasFirebaseConfig(FIREBASE_CONFIG)) {
+    el.heroStatus.textContent = "Firebase not configured (see FIREBASE_CONFIG in app.js)";
+    return;
+  }
+  firebaseApp = window.firebase.initializeApp(FIREBASE_CONFIG);
+  firebaseAuth = window.firebase.auth();
+
+  firebaseAuth.getRedirectResult().catch(() => {});
+
+  firebaseAuth.onAuthStateChanged(async (user) => {
+    authUser = user || null;
+    authToken = user ? await user.getIdToken() : "";
+    if (el.heroAccount) el.heroAccount.textContent = user ? (user.displayName || user.email || "Signed in") : "Signed out";
+    if (el.authButton) el.authButton.textContent = user ? "Sign out" : "Sign in";
+
+    // Once signed in, we can poll state if a lobby is selected.
+    if (user && state.lobbyId) {
+      beginPolling();
+      await refreshState();
+    }
+  });
+
+  if (el.authButton) {
+    el.authButton.addEventListener("click", async () => {
+      if (!firebaseAuth || firebaseAuthBusy) return;
+      if (firebaseAuth.currentUser) {
+        await firebaseAuth.signOut();
+        clearSession();
+        return;
+      }
+      const provider = new window.firebase.auth.GoogleAuthProvider();
+      firebaseAuthBusy = true;
+      el.authButton.disabled = true;
+      try {
+        await firebaseAuth.signInWithPopup(provider);
+      } catch (err) {
+        const code = err && err.code ? err.code : "";
+        if (code === "auth/popup-blocked") {
+          try {
+            await firebaseAuth.signInWithRedirect(provider);
+            return;
+          } catch {
+            if (el.heroStatus) {
+              el.heroStatus.textContent = "Sign-in blocked (popups). Allow popups for localhost or try another browser.";
+            }
+          }
+        } else if (code === "auth/configuration-not-found" || code === "auth/invalid-api-key") {
+          if (el.heroStatus) {
+            el.heroStatus.textContent =
+              "Firebase Auth missing: Console → Authentication → Get started; enable Google; add localhost to authorized domains.";
+          }
+          console.error(err);
+        } else if (code === "auth/operation-not-allowed") {
+          if (el.heroStatus) {
+            el.heroStatus.textContent = "Google sign-in is off in Firebase (Authentication → Sign-in method → Google).";
+          }
+          console.error(err);
+        } else if (code !== "auth/cancelled-popup-request" && code !== "auth/popup-closed-by-user") {
+          if (el.heroStatus) el.heroStatus.textContent = "Sign-in failed.";
+          console.error(err);
+        }
+      } finally {
+        firebaseAuthBusy = false;
+        el.authButton.disabled = false;
+      }
+    });
+  }
+}
 
 function saveSession() {
   localStorage.setItem("art-of-war-session", JSON.stringify({ lobbyId: state.lobbyId, token: state.token }));
@@ -457,9 +556,15 @@ function loadSession() {
 }
 
 async function api(path, options = {}) {
+  if (!authToken) {
+    throw new Error("Please sign in first.");
+  }
   const response = await fetch(path, {
     method: options.method || "GET",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${authToken}`,
+    },
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
   const payload = await response.json();
@@ -475,9 +580,11 @@ function beginPolling() {
 }
 
 async function refreshState() {
-  if (!state.lobbyId || !state.token) return;
+  if (!state.lobbyId) return;
   try {
-    const snapshot = await api(`/api/state?lobby=${encodeURIComponent(state.lobbyId)}&token=${encodeURIComponent(state.token)}`);
+    const snapshot = await api(
+      `/api/state?lobby=${encodeURIComponent(state.lobbyId)}&token=${encodeURIComponent(state.token)}`,
+    );
     if (state.suppressRenderWhileEditing) {
       state.pendingSnapshot = snapshot;
       return;
@@ -1994,7 +2101,7 @@ async function createLobby(playerCountOverride = null, defaultName = "") {
     },
   });
   state.lobbyId = payload.lobbyId;
-  state.token = payload.token;
+  state.token = payload.token || "";
   saveSession();
   history.replaceState({}, "", `/?lobby=${payload.lobbyId}`);
   beginPolling();
@@ -2027,7 +2134,7 @@ async function joinLobby() {
     body: { displayName: el.joinName.value.trim() },
   });
   state.lobbyId = payload.lobbyId;
-  state.token = payload.token;
+  state.token = payload.token || "";
   saveSession();
   history.replaceState({}, "", `/?lobby=${payload.lobbyId}`);
   beginPolling();
@@ -2665,9 +2772,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 loadSession();
-if (state.lobbyId && state.token) {
-  beginPolling();
-  refreshState();
-} else if (new URLSearchParams(window.location.search).get("lobby")) {
+initFirebase();
+if (new URLSearchParams(window.location.search).get("lobby")) {
   el.joinCode.value = new URLSearchParams(window.location.search).get("lobby");
 }

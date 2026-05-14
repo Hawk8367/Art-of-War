@@ -84,3 +84,52 @@ You need:
 2. Add reconnect-safe player auth instead of token-only browser storage.
 3. Add WebSockets for instant updates instead of polling.
 4. Add server-side validation for every move edge case before public release.
+
+## Firebase (Auth + Firestore + Hosting + Functions)
+
+This repo now includes Firebase scaffolding so you can ship:
+
+- Google sign-in (Firebase Auth)
+- Persistent lobbies + game state (Firestore)
+- Server-authoritative resolution (Cloud Functions)
+- Hosting + `/api/*` rewrites (Firebase Hosting)
+
+### One-time setup
+
+Install Firebase CLI (if you don't have it):
+
+```powershell
+npm i -g firebase-tools
+firebase login
+```
+
+This repo is wired to project **`art-of-war-ad70e`** (see `.firebaserc`). If you use a different project ID, update `.firebaserc` and `FIREBASE_CONFIG` in `app.js`.
+
+```powershell
+firebase use art-of-war-ad70e
+```
+
+In Firebase Console:
+
+- Enable **Authentication → Sign-in method → Google**
+- Under **Authentication → Settings → Authorized domains**, ensure **`localhost`** and your **Hosting domain** are listed (needed for Google sign-in)
+
+Install function dependencies:
+
+```powershell
+cd functions
+npm install
+cd ..
+```
+
+Deploy:
+
+```powershell
+firebase deploy
+```
+
+### Local emulation (optional)
+
+```powershell
+firebase emulators:start
+```
